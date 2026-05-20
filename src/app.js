@@ -45,7 +45,8 @@ async function start() {
     return;
   }
 
-  const { App } = require('@slack/bolt');
+  const { App }              = require('@slack/bolt');
+  const { registerCommands } = require('./commands/index');
 
   const app = new App({
     token: config.slackBotToken,
@@ -54,25 +55,8 @@ async function start() {
     appToken: config.slackAppToken,
   });
 
-  // ── /watercooler command ──────────────────────────────────────────────────
-  // Phase 1 stub: echoes the command back.
-  // Full routing (join / pause / resume / leave / status / admin) comes in Phase 3.
-  app.command('/watercooler', async ({ command, ack, respond }) => {
-    await ack(); // must acknowledge within 3 seconds or Slack shows an error
-
-    const text = (command.text || '').trim().toLowerCase();
-
-    if (text === 'status') {
-      await respond(
-        '👋 Watercooler is alive! Full status coming in Phase 3 once the database is set up.'
-      );
-      return;
-    }
-
-    await respond(
-      `Watercooler received: \`${command.text || '(nothing)'}\`\n_Full commands are coming — stay tuned!_`
-    );
-  });
+  // Register all /watercooler subcommands (join, pause, resume, leave, status, …)
+  registerCommands(app);
 
   await app.start();
   console.log('⚡️ Slack Bolt connected via Socket Mode\n');
