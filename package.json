@@ -4,8 +4,10 @@
   "description": "Internal Slack app for casual 1:1 social matching",
   "main": "src/app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "node --watch src/app.js"
+    "start": "node --disable-warning=ExperimentalWarning src/app.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/app.js",
+    "db:init": "node --disable-warning=ExperimentalWarning scripts/db-init.js",
+    "db:reset": "node --disable-warning=ExperimentalWarning scripts/db-reset.js"
   },
   "dependencies": {
     "@slack/bolt": "^3",

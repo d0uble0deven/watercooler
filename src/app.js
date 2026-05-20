@@ -1,7 +1,12 @@
-const express = require('express');
-const config = require('./config');
+const express    = require('express');
+const config     = require('./config');
+const { initDb } = require('./db/init');
 
 async function start() {
+  // ── Database ──────────────────────────────────────────────────────────────
+  // Creates tables on first run; safe (idempotent) on every subsequent run.
+  initDb();
+
   // ── Express server ────────────────────────────────────────────────────────
   // Always starts, regardless of Slack credentials.
   // Powers GET /health and will serve any future HTTP routes.
