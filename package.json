@@ -1,0 +1,17 @@
+{
+  "name": "watercooler",
+  "version": "0.1.0",
+  "description": "Internal Slack app for casual 1:1 social matching",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3",
+    "dotenv": "^16"
+  },
+  "notes": {
+    "sqlite": "Using Node 24's built-in node:sqlite (no install needed, added in Phase 2)"
+  }
+}

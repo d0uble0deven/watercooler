@@ -1,0 +1,11 @@
+# Secrets — NEVER commit this
+.env
+
+# Dependencies
+node_modules/
+
+# SQLite database (local dev data only)
+data/
+
+# macOS
+.DS_Store
