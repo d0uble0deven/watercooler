@@ -7,6 +7,8 @@
 //   set avoid-repeat-rounds <n>     — n must be >= 0
 //   set cadence weekly|biweekly|monthly
 //   set channel <channel-id>        — use a Slack channel ID (C...) for reliability
+//   set intro-day <day-name>        — day of week the scheduler fires
+//   set intro-time <HH:MM>          — time of day the scheduler fires (24-hour)
 
 const { updateSettings } = require('../../lib/rounds');
 
@@ -16,6 +18,8 @@ const SET_HELP = [
   '• `/watercooler admin set avoid-repeat-rounds <n>` — repeat-avoidance window (0 = off)',
   '• `/watercooler admin set cadence weekly|biweekly|monthly`',
   '• `/watercooler admin set channel <channel-id>` — channel for automated announcements',
+  '• `/watercooler admin set intro-day <day>` — day the scheduler fires (e.g. `monday`)',
+  '• `/watercooler admin set intro-time <HH:MM>` — time the scheduler fires (24-hour)',
 ].join('\n');
 
 async function set(command, args, respond) {
@@ -28,6 +32,8 @@ async function set(command, args, respond) {
     case 'avoid-repeat-rounds': return await setAvoidRepeatRounds(value, respond);
     case 'cadence':             return await setCadence(value, respond);
     case 'channel':             return await setChannel(value, respond);
+    case 'intro-day':           return await setIntroDay(value, respond);
+    case 'intro-time':          return await setIntroTime(value, respond);
     default:
       return await respond(
         `❌ Unknown setting: \`${setting || '(none)'}\`\n\n${SET_HELP}`
@@ -80,6 +86,47 @@ async function setChannel(value, respond) {
   }
   updateSettings({ intro_channel_id: value });
   await respond(`✅ Intro channel set to *${value}*.\n_This channel will be used for scheduled announcements (Phase 8)._`);
+}
+
+// ── Scheduler settings ────────────────────────────────────────────────────────
+
+const VALID_DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+async function setIntroDay(value, respond) {
+  const normalised = (value || '').toLowerCase().trim();
+  if (!VALID_DAYS.includes(normalised)) {
+    await respond(
+      `❌ Intro day must be one of: ${VALID_DAYS.map((d) => `\`${d}\``).join(', ')}.\n` +
+      `Example: \`/watercooler admin set intro-day monday\``
+    );
+    return;
+  }
+  updateSettings({ intro_day: normalised });
+  await respond(`✅ Intro day updated to *${normalised}*. The scheduler will use this on the next cycle.`);
+}
+
+async function setIntroTime(value, respond) {
+  // Accept H:MM or HH:MM (24-hour)
+  const match = (value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    await respond(
+      '❌ Intro time must be in `HH:MM` format (24-hour).\n' +
+      'Example: `/watercooler admin set intro-time 09:00`'
+    );
+    return;
+  }
+  const hour   = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    await respond(
+      '❌ Time out of range — use `00:00` to `23:59`.\n' +
+      'Example: `/watercooler admin set intro-time 14:30`'
+    );
+    return;
+  }
+  const normalised = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  updateSettings({ intro_time: normalised });
+  await respond(`✅ Intro time updated to *${normalised}*. The scheduler will use this on the next cycle.`);
 }
 
 module.exports = set;

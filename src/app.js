@@ -47,6 +47,7 @@ async function start() {
 
   const { App }              = require('@slack/bolt');
   const { registerCommands } = require('./commands/index');
+  const { startScheduler }   = require('./scheduler/index');
 
   const app = new App({
     token: config.slackBotToken,
@@ -60,6 +61,9 @@ async function start() {
 
   await app.start();
   console.log('⚡️ Slack Bolt connected via Socket Mode\n');
+
+  // Start the scheduler (no-op if SCHEDULING_ENABLED != true)
+  startScheduler(app);
 }
 
 start().catch((err) => {
