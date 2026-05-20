@@ -224,6 +224,27 @@ function updateSettings(fields) {
   return getSettings();
 }
 
+/**
+ * On startup: cancels any rounds that have been stuck as 'pending' for
+ * longer than 1 hour. These are almost certainly orphaned by a crash.
+ *
+ * Without this, a single crash would permanently block all future runs
+ * (isRoundInProgress() would always return true).
+ *
+ * Returns the number of rounds cancelled.
+ */
+function cancelStuckRounds() {
+  const result = getDb()
+    .prepare(`
+      UPDATE rounds
+      SET    status = 'cancelled', completed_at = datetime('now')
+      WHERE  status = 'pending'
+        AND  datetime(started_at, '+1 hour') < datetime('now')
+    `)
+    .run();
+  return result.changes;
+}
+
 module.exports = {
   getEligibleUsers,
   getSettings,
@@ -238,4 +259,5 @@ module.exports = {
   getRecentRounds,
   getParticipantCounts,
   updateSettings,
+  cancelStuckRounds,
 };

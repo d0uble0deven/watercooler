@@ -1,11 +1,25 @@
 const express    = require('express');
 const config     = require('./config');
-const { initDb } = require('./db/init');
+const { initDb }              = require('./db/init');
+const { cancelStuckRounds }   = require('./lib/rounds');
 
 async function start() {
   // ── Database ──────────────────────────────────────────────────────────────
   // Creates tables on first run; safe (idempotent) on every subsequent run.
   initDb();
+
+  // Cancel any rounds left stuck as 'pending' from a previous crash.
+  // Without this, isRoundInProgress() would block all future runs forever.
+  const stuckCount = cancelStuckRounds();
+  if (stuckCount > 0) {
+    console.warn(`⚠️  Cancelled ${stuckCount} stuck round(s) from a previous crash.`);
+  }
+
+  // ── Startup validation ────────────────────────────────────────────────────
+  if (config.adminUserIds.length === 0) {
+    console.warn('⚠️  ADMIN_USER_IDS is not set — nobody can run admin commands.');
+    console.warn('   Add your Slack user ID to .env: ADMIN_USER_IDS=U01XXXXXXX');
+  }
 
   // ── Express server ────────────────────────────────────────────────────────
   // Always starts, regardless of Slack credentials.
@@ -64,6 +78,23 @@ async function start() {
 
   // Start the scheduler (no-op if SCHEDULING_ENABLED != true)
   startScheduler(app);
+
+  // ── Graceful shutdown ────────────────────────────────────────────────────
+  // Give in-flight Slack API calls a moment to finish before the process exits.
+  // Without this, a SIGTERM mid-run could orphan a 'pending' round (caught by
+  // cancelStuckRounds() on the next startup, but cleaner to avoid entirely).
+  const shutdown = (signal) => {
+    console.log(`\n[Watercooler] ${signal} received — shutting down gracefully…`);
+    server.close(() => {
+      console.log('[Watercooler] HTTP server closed. Goodbye.\n');
+      process.exit(0);
+    });
+    // Force-exit after 10 s if the server hasn't drained by then.
+    setTimeout(() => process.exit(0), 10_000).unref();
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
 }
 
 start().catch((err) => {

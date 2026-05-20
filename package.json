@@ -13,7 +13,8 @@
     "test:run": "node --disable-warning=ExperimentalWarning scripts/test-run.js",
     "test:admin": "node --disable-warning=ExperimentalWarning scripts/test-admin.js",
     "test:scheduler": "node --disable-warning=ExperimentalWarning scripts/test-scheduler.js",
-    "test": "node --test --disable-warning=ExperimentalWarning tests/matching.test.js"
+    "test": "node --test --disable-warning=ExperimentalWarning tests/matching.test.js",
+    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler"
   },
   "dependencies": {
     "@slack/bolt": "^3",

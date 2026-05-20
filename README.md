@@ -75,11 +75,11 @@ scripts/
 
 - [x] Phase 0 — Discovery + Slack concepts
 - [x] Phase 1 — Basic app skeleton ← you are here
-- [ ] Phase 2 — SQLite persistence
-- [ ] Phase 3 — User participation commands
-- [ ] Phase 4 — Matching engine
-- [ ] Phase 5 — Admin dry run
-- [ ] Phase 6 — Admin real run
-- [ ] Phase 7 — Admin management commands
-- [ ] Phase 8 — Scheduled automation
-- [ ] Phase 9 — Production readiness review
+- [x] Phase 2 — SQLite persistence
+- [x] Phase 3 — User participation commands
+- [x] Phase 4 — Matching engine
+- [x] Phase 5 — Admin dry run
+- [x] Phase 6 — Admin real run
+- [x] Phase 7 — Admin management commands
+- [x] Phase 8 — Scheduled automation
+- [x] Phase 9 — Production readiness review

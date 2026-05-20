@@ -109,7 +109,24 @@ async function run(command, respond, client) {
   completeRound(roundId);
   console.log(`[admin run] Round ${roundId} completed. ${successCount} ok, ${failures.length} failed.`);
 
-  // ── 7. Report to admin ─────────────────────────────────────────────────────
+  // ── 7. Optional channel announcement ──────────────────────────────────────
+  // If an intro channel is configured, post a summary there so the whole
+  // workspace can see that a Watercooler round just happened.
+  if (settings.intro_channel_id && client && successCount > 0) {
+    try {
+      await client.chat.postMessage({
+        channel: settings.intro_channel_id,
+        text:
+          `🎉 *Watercooler round #${roundId} is live!* ` +
+          `*${successCount} group(s)* have been matched — check your DMs for your intro. ☕`,
+      });
+    } catch (err) {
+      // Non-fatal — the round completed successfully; just log the failure.
+      console.error('[admin run] Failed to post channel announcement:', err.message);
+    }
+  }
+
+  // ── 8. Report to admin ─────────────────────────────────────────────────────
   if (failures.length === 0) {
     await respond(
       `✅ *Round complete!*\n` +
