@@ -58,9 +58,64 @@ function updateUser(slackUserId, fields) {
   return getUserBySlackId(slackUserId);
 }
 
+// ── Admin reads ───────────────────────────────────────────────────────────────
+
+// All active, non-paused users (i.e., eligible for matching). Excludes admin-excluded users.
+// Used by the `participants` admin command and as the basis for `summary`.
+function getActiveUsers() {
+  return getDb()
+    .prepare(`
+      SELECT u.*
+      FROM   users u
+      WHERE  u.is_active  = 1
+        AND  u.is_paused  = 0
+        AND  u.slack_user_id NOT IN (SELECT slack_user_id FROM exclusions)
+      ORDER  BY u.display_name
+    `)
+    .all();
+}
+
+// All users who are active but paused.
+function getPausedUsers() {
+  return getDb()
+    .prepare(`SELECT * FROM users WHERE is_active = 1 AND is_paused = 1 ORDER BY display_name`)
+    .all();
+}
+
+// All admin-exclusion records.
+function getExclusions() {
+  return getDb()
+    .prepare(`SELECT * FROM exclusions ORDER BY created_at DESC`)
+    .all();
+}
+
+// ── Admin exclusion writes ────────────────────────────────────────────────────
+
+// Add (or replace) an exclusion. Does not modify the users table.
+function addExclusion(slackUserId, reason, createdBy) {
+  getDb()
+    .prepare(`
+      INSERT OR REPLACE INTO exclusions (slack_user_id, reason, created_by)
+      VALUES (?, ?, ?)
+    `)
+    .run(slackUserId, reason || null, createdBy);
+}
+
+// Remove an exclusion. Returns the SQLite result ({ changes: n }).
+function removeExclusion(slackUserId) {
+  return getDb()
+    .prepare(`DELETE FROM exclusions WHERE slack_user_id = ?`)
+    .run(slackUserId);
+}
+
 module.exports = {
   getUserBySlackId,
   isUserExcluded,
   createUser,
   updateUser,
+  getActiveUsers,
+  getPausedUsers,
+  getExclusions,
+  addExclusion,
+  removeExclusion,
 };

@@ -26,7 +26,8 @@ const HELP_TEXT = `*Watercooler commands:*
 • \`/watercooler status\` — check your current status`;
 
 function registerCommands(app) {
-  app.command('/watercooler', async ({ command, ack, respond }) => {
+  // `client` is Bolt's Web API client — passed down to admin commands that need it.
+  app.command('/watercooler', async ({ command, ack, respond, client }) => {
     // Always acknowledge within 3 seconds — Slack will show a timeout error if we don't.
     await ack();
 
@@ -44,7 +45,7 @@ function registerCommands(app) {
         // Admin subcommands — everything after "admin" is forwarded as text
         case 'admin': {
           const adminText = (command.text || '').replace(/^admin\s*/i, '').trim();
-          return await handleAdmin(command, adminText, respond);
+          return await handleAdmin(command, adminText, respond, client);
         }
 
         default:

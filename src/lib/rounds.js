@@ -161,6 +161,69 @@ function updateMatchChannel(matchId, slackDmChannelId) {
     .run(slackDmChannelId, matchId);
 }
 
+// ── Admin reads ───────────────────────────────────────────────────────────────
+
+/**
+ * Returns the last `limit` completed rounds with group and participant counts.
+ * Used by the `recent-rounds` admin command.
+ */
+function getRecentRounds(limit = 5) {
+  return getDb()
+    .prepare(`
+      SELECT
+        r.id,
+        r.started_at,
+        r.completed_at,
+        r.created_by,
+        COUNT(DISTINCT m.id)  AS match_count,
+        COUNT(mm.id)          AS participant_count
+      FROM   rounds r
+      LEFT JOIN matches      m  ON m.round_id  = r.id
+      LEFT JOIN match_members mm ON mm.match_id = m.id
+      WHERE  r.status = 'completed'
+      GROUP  BY r.id
+      ORDER  BY r.id DESC
+      LIMIT  ?
+    `)
+    .all(limit);
+}
+
+/**
+ * Returns participant counts used by the `summary` admin command.
+ */
+function getParticipantCounts() {
+  const db = getDb();
+  return {
+    eligible: db.prepare(`
+      SELECT COUNT(*) AS n FROM users
+      WHERE is_active = 1 AND is_paused = 0
+        AND slack_user_id NOT IN (SELECT slack_user_id FROM exclusions)
+    `).get().n,
+    paused:          db.prepare(`SELECT COUNT(*) AS n FROM users WHERE is_active = 1 AND is_paused = 1`).get().n,
+    excluded:        db.prepare(`SELECT COUNT(*) AS n FROM exclusions`).get().n,
+    totalActive:     db.prepare(`SELECT COUNT(*) AS n FROM users WHERE is_active = 1`).get().n,
+    completedRounds: db.prepare(`SELECT COUNT(*) AS n FROM rounds WHERE status = 'completed'`).get().n,
+    lastRoundDate:   db.prepare(`SELECT started_at FROM rounds WHERE status = 'completed' ORDER BY id DESC LIMIT 1`).get()?.started_at ?? null,
+  };
+}
+
+// ── Settings write ────────────────────────────────────────────────────────────
+
+/**
+ * Updates specific fields in the single settings row and returns the updated row.
+ * fields: plain object e.g. { group_size: 3 } or { cadence: 'biweekly' }
+ */
+function updateSettings(fields) {
+  const setClauses = Object.keys(fields).map((k) => `${k} = ?`).join(', ');
+  const values     = [...Object.values(fields), new Date().toISOString()];
+
+  getDb()
+    .prepare(`UPDATE settings SET ${setClauses}, updated_at = ? WHERE id = 1`)
+    .run(...values);
+
+  return getSettings();
+}
+
 module.exports = {
   getEligibleUsers,
   getSettings,
@@ -172,4 +235,7 @@ module.exports = {
   savePairHistory,
   completeRound,
   updateMatchChannel,
+  getRecentRounds,
+  getParticipantCounts,
+  updateSettings,
 };

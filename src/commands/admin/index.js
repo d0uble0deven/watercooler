@@ -9,24 +9,35 @@
 // Phase 6:  run
 // Phase 7:  summary, participants, paused, settings, recent-rounds, set, exclude, include
 
-const { isAdmin } = require('../../lib/adminGuard');
-const dryRun      = require('./dry-run');
+const { isAdmin }       = require('../../lib/adminGuard');
+const dryRun            = require('./dry-run');
+const run               = require('./run');
+const summary           = require('./summary');
+const participants      = require('./participants');
+const paused            = require('./paused');
+const showSettings      = require('./show-settings');
+const recentRounds      = require('./recent-rounds');
+const set               = require('./set');
+const { exclude, include } = require('./exclusions');
 
 const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin dry-run\` — preview matches without sending DMs
-• \`/watercooler admin run\` — run matching and send intro DMs _(Phase 6)_
-• \`/watercooler admin summary\` — participant counts at a glance _(Phase 7)_
-• \`/watercooler admin participants\` — list active participants _(Phase 7)_
-• \`/watercooler admin paused\` — list paused participants _(Phase 7)_
-• \`/watercooler admin settings\` — show current settings _(Phase 7)_
-• \`/watercooler admin recent-rounds\` — last few match rounds _(Phase 7)_
-• \`/watercooler admin set group-size <n>\` _(Phase 7)_
-• \`/watercooler admin set avoid-repeat-rounds <n>\` _(Phase 7)_
-• \`/watercooler admin set cadence weekly|biweekly|monthly\` _(Phase 7)_
-• \`/watercooler admin exclude @user\` _(Phase 7)_
-• \`/watercooler admin include @user\` _(Phase 7)_`;
+• \`/watercooler admin run\` — run matching and send intro DMs
+• \`/watercooler admin summary\` — participant counts at a glance
+• \`/watercooler admin participants\` — list eligible participants
+• \`/watercooler admin paused\` — list paused participants
+• \`/watercooler admin settings\` — show current settings
+• \`/watercooler admin recent-rounds\` — last few match rounds
+• \`/watercooler admin set group-size <n>\`
+• \`/watercooler admin set avoid-repeat-rounds <n>\`
+• \`/watercooler admin set cadence weekly|biweekly|monthly\`
+• \`/watercooler admin set channel <channel-id>\`
+• \`/watercooler admin exclude @user\` — prevent user from being matched
+• \`/watercooler admin include @user\` — lift an exclusion`;
 
-async function handleAdmin(command, text, respond) {
+// `client` is Bolt's Web API client — only needed by commands that call Slack
+// (currently just `run`). Read-only commands don't use it.
+async function handleAdmin(command, text, respond, client) {
   // Admin guard — one check covers all sub-commands
   if (!isAdmin(command.user_id)) {
     await respond(
@@ -36,7 +47,12 @@ async function handleAdmin(command, text, respond) {
     return;
   }
 
-  const [subcommand = ''] = (text || '').trim().toLowerCase().split(/\s+/);
+  // Split into subcommand + remaining args.
+  // e.g. "set group-size 3" → subcommand="set", args="group-size 3"
+  // e.g. "exclude <@U01ABC|alice>" → subcommand="exclude", args="<@U01ABC|alice>"
+  const parts = (text || '').trim().split(/\s+/);
+  const subcommand = (parts[0] || '').toLowerCase();
+  const args = parts.slice(1).join(' ');
 
   try {
     switch (subcommand) {
@@ -44,23 +60,32 @@ async function handleAdmin(command, text, respond) {
       case 'dry-run':
         return await dryRun(command, respond);
 
-      // ── Phase 6 stubs ──────────────────────────────────────────────────────
       case 'run':
-        return await respond(
-          '`/watercooler admin run` is coming in Phase 6.\n' +
-          'Use `/watercooler admin dry-run` to preview matches in the meantime.'
-        );
+        return await run(command, respond, client);
 
-      // ── Phase 7 stubs ──────────────────────────────────────────────────────
       case 'summary':
+        return await summary(command, respond);
+
       case 'participants':
+        return await participants(command, respond);
+
       case 'paused':
+        return await paused(command, respond);
+
       case 'settings':
+        return await showSettings(command, respond);
+
       case 'recent-rounds':
+        return await recentRounds(command, respond);
+
       case 'set':
+        return await set(command, args, respond);
+
       case 'exclude':
+        return await exclude(command, args, respond);
+
       case 'include':
-        return await respond(`\`/watercooler admin ${subcommand}\` is coming in Phase 7.`);
+        return await include(command, args, respond);
 
       default:
         return await respond(ADMIN_HELP);
