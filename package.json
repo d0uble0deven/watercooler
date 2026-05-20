@@ -9,6 +9,7 @@
     "db:init": "node --disable-warning=ExperimentalWarning scripts/db-init.js",
     "db:reset": "node --disable-warning=ExperimentalWarning scripts/db-reset.js",
     "test:commands": "node --disable-warning=ExperimentalWarning scripts/test-commands.js",
+    "test:dry-run": "node --disable-warning=ExperimentalWarning scripts/test-dry-run.js",
     "test": "node --test --disable-warning=ExperimentalWarning tests/matching.test.js"
   },
   "dependencies": {

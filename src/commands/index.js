@@ -3,19 +3,20 @@
 // Registers /watercooler with Slack Bolt and routes subcommands to their handlers.
 //
 // Routing logic:
-//   /watercooler join     → commands/user/join.js
-//   /watercooler pause    → commands/user/pause.js
-//   /watercooler resume   → commands/user/resume.js
-//   /watercooler leave    → commands/user/leave.js
-//   /watercooler status   → commands/user/status.js
-//   /watercooler admin …  → (Phase 5+)
-//   /watercooler          → help text
+//   /watercooler join      → commands/user/join.js
+//   /watercooler pause     → commands/user/pause.js
+//   /watercooler resume    → commands/user/resume.js
+//   /watercooler leave     → commands/user/leave.js
+//   /watercooler status    → commands/user/status.js
+//   /watercooler admin … → commands/admin/index.js
+//   /watercooler           → help text
 
-const join   = require('./user/join');
-const pause  = require('./user/pause');
-const resume = require('./user/resume');
-const leave  = require('./user/leave');
-const status = require('./user/status');
+const join                = require('./user/join');
+const pause               = require('./user/pause');
+const resume              = require('./user/resume');
+const leave               = require('./user/leave');
+const status              = require('./user/status');
+const { handleAdmin }     = require('./admin/index');
 
 const HELP_TEXT = `*Watercooler commands:*
 • \`/watercooler join\` — opt in to casual matching
@@ -40,9 +41,11 @@ function registerCommands(app) {
         case 'leave':  return await leave(command, respond);
         case 'status': return await status(command, respond);
 
-        // Admin subcommands — wired up in Phase 5
-        case 'admin':
-          return await respond('⚙️ Admin commands are coming in Phase 5. Stay tuned!');
+        // Admin subcommands — everything after "admin" is forwarded as text
+        case 'admin': {
+          const adminText = (command.text || '').replace(/^admin\s*/i, '').trim();
+          return await handleAdmin(command, adminText, respond);
+        }
 
         default:
           return await respond(HELP_TEXT);
