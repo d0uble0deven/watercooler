@@ -1,0 +1,66 @@
+'use strict';
+
+// DB helper functions for the users and exclusions tables.
+// All functions are synchronous (node:sqlite is synchronous by design).
+// Command handlers call these instead of writing SQL directly.
+
+const { getDb } = require('../db/connection');
+
+// ── Reads ─────────────────────────────────────────────────────────────────────
+
+// Returns the full user row, or undefined if they've never joined.
+function getUserBySlackId(slackUserId) {
+  return getDb()
+    .prepare('SELECT * FROM users WHERE slack_user_id = ?')
+    .get(slackUserId);
+}
+
+// Returns true if an admin has excluded this user from matching.
+function isUserExcluded(slackUserId) {
+  const row = getDb()
+    .prepare('SELECT id FROM exclusions WHERE slack_user_id = ?')
+    .get(slackUserId);
+  return !!row;
+}
+
+// ── Writes ────────────────────────────────────────────────────────────────────
+
+// Insert a new user row and return the full record.
+function createUser(slackUserId, displayName) {
+  getDb()
+    .prepare(`
+      INSERT INTO users (slack_user_id, display_name, is_active, is_paused)
+      VALUES (?, ?, 1, 0)
+    `)
+    .run(slackUserId, displayName);
+
+  return getUserBySlackId(slackUserId);
+}
+
+// Update specific fields on a user row.
+// fields: plain object e.g. { is_active: 0 } or { is_paused: 1 }
+// updated_at is always bumped automatically.
+function updateUser(slackUserId, fields) {
+  const setClauses = Object.keys(fields)
+    .map((k) => `${k} = ?`)
+    .join(', ');
+
+  const values = [
+    ...Object.values(fields),
+    new Date().toISOString(), // updated_at
+    slackUserId,
+  ];
+
+  getDb()
+    .prepare(`UPDATE users SET ${setClauses}, updated_at = ? WHERE slack_user_id = ?`)
+    .run(...values);
+
+  return getUserBySlackId(slackUserId);
+}
+
+module.exports = {
+  getUserBySlackId,
+  isUserExcluded,
+  createUser,
+  updateUser,
+};
