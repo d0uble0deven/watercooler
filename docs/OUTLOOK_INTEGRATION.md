@@ -1,59 +1,51 @@
 # Watercooler — Outlook Calendar Integration
 
-Setup guide for connecting Watercooler to Microsoft 365 so it can read calendars, suggest meeting times, and auto-create Teams invites.
+---
 
-**This feature is built but disabled by default.** Neither section needs to be done until you are ready to turn it on. The app runs exactly as before until `CALENDAR_ENABLED=true` is set.
+# ✉️ FOR IT / MICROSOFT ADMIN
+
+> **This section is everything you need. You can ignore everything below the divider.**
 
 ---
 
-## How It Works (Overview)
+## What We're Building
 
-After two people are matched, instead of just sending an intro DM, the app will:
+We have an internal Slack app called Watercooler that randomly pairs DocMe360 employees for casual 15-minute virtual coffee chats. Right now it sends people a DM intro and they schedule the meeting themselves.
 
-1. Read both people's Outlook calendars for the next 3 weeks
-2. Find overlapping 15-minute free slots within each person's business hours
-3. Post 3 suggested times as clickable buttons in the group DM
-4. When one person clicks a time — create a calendar invite + Teams meeting link for both
-5. If nobody clicks within the configured deadline — auto-book the first available slot and send the invite automatically
+We want to improve it so the app automatically:
+1. Reads both people's Outlook calendars to find when they're both free
+2. Suggests a few time slots directly in the Slack message
+3. Creates a calendar invite with a Teams meeting link when someone picks a time
 
-**Fallback:** if calendar access fails for any reason, the regular intro DM is sent and people schedule it themselves. The round never fails because of a calendar issue.
-
----
-
-## Who Does What
-
-| Task | Who |
-|---|---|
-| Part 1 — Azure AD app registration | IT / Microsoft admin |
-| Part 2 — Add credentials to the server | Developer |
-| Part 3 — Enable and test | Developer + IT (if issues) |
+To do this, the app needs permission to read and write to Microsoft 365 calendars on behalf of the organization. This is a one-time setup in Azure Active Directory — no ongoing work required from you after this.
 
 ---
 
-## Part 1 — Azure AD App Registration (IT)
+## What You Need to Do
 
-> **Time required:** ~15 minutes
-> **Where:** https://portal.azure.com
+**Time required:** ~15 minutes
+**Where:** https://portal.azure.com
+**What you'll send back:** 3 credential values (Tenant ID, Client ID, Client Secret)
+
+---
 
 ### Step 1 — Sign in to Azure Portal
 
-Go to **https://portal.azure.com** and sign in with your Microsoft 365 admin account.
+Go to **https://portal.azure.com** and sign in with your DocMe360 Microsoft 365 admin account.
 
 ---
 
 ### Step 2 — Register a New App
 
-1. In the search bar at the top, search for **"App registrations"** and click it
+1. In the search bar at the top, type **"App registrations"** and click it
 2. Click **"+ New registration"**
-3. Fill in:
+3. Fill in the following:
    - **Name:** `Watercooler`
-   - **Supported account types:** `Accounts in this organizational directory only (DocMe360 only - Single tenant)`
-   - **Redirect URI:** leave blank
+   - **Supported account types:** select `Accounts in this organizational directory only (DocMe360 only - Single tenant)`
+   - **Redirect URI:** leave this blank
 4. Click **Register**
 
-You'll land on the app's overview page. **Copy and save these two values** — the developer will need them:
-- **Application (client) ID** → this is `AZURE_CLIENT_ID`
-- **Directory (tenant) ID** → this is `AZURE_TENANT_ID`
+You'll land on the app overview page. **Leave this page open** — you'll need two values from it in Step 5.
 
 ---
 
@@ -62,20 +54,20 @@ You'll land on the app's overview page. **Copy and save these two values** — t
 1. In the left sidebar, click **"API permissions"**
 2. Click **"+ Add a permission"**
 3. Click **"Microsoft Graph"**
-4. Click **"Application permissions"** (not Delegated — this is important)
-5. Search for and add each of these permissions:
+4. Click **"Application permissions"** ← important: make sure it's Application, not Delegated
+5. Search for and add each of these four permissions one at a time:
 
-| Permission | What it allows |
+| Permission to add | Why the app needs it |
 |---|---|
-| `Calendars.Read` | Read employees' calendars to find free slots |
-| `Calendars.ReadWrite` | Create calendar invites on employees' calendars |
-| `OnlineMeetings.ReadWrite` | Generate Teams meeting links |
-| `User.Read.All` | Look up employees' email addresses and timezones |
+| `Calendars.Read` | Read employees' calendars to find times when both people are free |
+| `Calendars.ReadWrite` | Create the calendar invite once a meeting time is confirmed |
+| `OnlineMeetings.ReadWrite` | Generate a Teams meeting link to include in the invite |
+| `User.Read.All` | Look up each employee's email address and timezone |
 
 6. Click **"Add permissions"**
-7. Click **"Grant admin consent for DocMe360"** (the blue button) → click **Yes** to confirm
+7. You'll see a yellow warning banner — click the blue button **"Grant admin consent for DocMe360"** then click **Yes** to confirm
 
-> ⚠️ The "Grant admin consent" step is required. Without it the permissions are requested but not active.
+> ⚠️ This last consent step is required. The permissions won't be active until you click it.
 
 ---
 
@@ -83,67 +75,84 @@ You'll land on the app's overview page. **Copy and save these two values** — t
 
 1. In the left sidebar, click **"Certificates & secrets"**
 2. Click **"+ New client secret"**
-3. Description: `Watercooler app secret`
-4. Expiry: **24 months** (or your org's standard)
+3. Set the description to `Watercooler app secret`
+4. Set expiry to **24 months** (or whatever your org standard is)
 5. Click **Add**
-6. **Immediately copy the secret Value** (the long string in the Value column) — this is `AZURE_CLIENT_SECRET`
+6. A new row will appear in the table. **Immediately copy the value in the "Value" column** — it's a long string of letters and numbers
 
-> ⚠️ This value is only shown once. If you navigate away without copying it, you'll need to delete it and create a new one.
-
----
-
-### Step 5 — Share Credentials with the Developer
-
-Send the developer these three values securely (do not send via Slack or email in plain text — use a password manager or secure note):
-
-```
-AZURE_TENANT_ID=        (Directory ID from Step 2)
-AZURE_CLIENT_ID=        (Application ID from Step 2)
-AZURE_CLIENT_SECRET=    (Secret value from Step 4)
-```
-
-**IT's work is done.** No ongoing involvement needed unless the secret expires or permissions need to change.
+> ⚠️ This value is only shown once. If you navigate away before copying it you'll need to delete it and create a new one.
 
 ---
 
-## Part 2 — Developer Setup
+### Step 5 — Send These 3 Values Back
 
-### Step 1 — Add credentials to `.env`
+Go back to the app overview page (click **"Overview"** in the left sidebar).
 
-Open `.env` and add the three values IT provided:
+You need to send the developer three values.
+
+```
+AZURE_TENANT_ID     =   the "Directory (tenant) ID" on the overview page
+AZURE_CLIENT_ID     =   the "Application (client) ID" on the overview page
+AZURE_CLIENT_SECRET =   the long value you copied in Step 4
+```
+
+---
+
+### ✅ You're Done
+
+That's everything. The app will use these credentials to authenticate with Microsoft 365 — no individual employees need to log in or authorize anything, and no further involvement is needed from you unless the client secret expires (in 24 months) or permissions need to change.
+
+If something isn't working after the developer plugs in the credentials, the most likely cause is that the **"Grant admin consent"** click in Step 3 was missed — that's the first thing to double-check.
+
+---
+---
+
+# 👩‍💻 FOR THE DEVELOPER
+
+Everything below is the developer-side setup. To be done after IT has provided the three credential values above.
+
+---
+
+## How the Feature Works (Overview)
+
+After two people are matched, instead of just sending an intro DM, the app will:
+
+1. Read both people's Outlook calendars for the next 3 weeks
+2. Find overlapping 15-minute free slots within each person's business hours (9 AM–5 PM in their local timezone)
+3. Post 3 suggested times as clickable buttons in the group DM
+4. When one person clicks — create a calendar invite + Teams link for both
+5. If nobody clicks within the configured deadline — auto-book the first available slot
+
+**Fallback:** if calendar access fails for any reason, the regular intro DM is sent. The round never fails because of a calendar issue.
+
+---
+
+## Step 1 — Add Credentials to `.env`
 
 ```env
-# Microsoft Graph — from Azure AD app registration
+# Microsoft Graph — values provided by IT
 AZURE_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 AZURE_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 AZURE_CLIENT_SECRET=your-secret-value-here
 
-# Calendar feature — keep false until ready to test
+# Keep false until ready to test end-to-end
 CALENDAR_ENABLED=false
 ```
 
 ---
 
-### Step 2 — Restart the server
+## Step 2 — Restart and Verify Connection
 
 ```bash
 npm start
 ```
 
-You should see a new line in the startup output:
-
+Expected startup output:
 ```
 [Calendar] Microsoft Graph client initialised (calendar disabled — set CALENDAR_ENABLED=true to enable)
 ```
 
-If you see an auth error instead, double-check the three credential values and that IT clicked "Grant admin consent" in Step 3 above.
-
----
-
-### Step 3 — Verify the connection (before enabling)
-
-Run this command in Slack to confirm the Graph API credentials are working without turning the feature on:
-
+Then verify in Slack:
 ```
 /watercooler admin calendar-status
 ```
@@ -151,18 +160,15 @@ Run this command in Slack to confirm the Graph API credentials are working witho
 Expected response:
 ```
 ✅ Microsoft Graph connected — calendar integration is ready.
-   CALENDAR_ENABLED is currently false. Run:
-   /watercooler admin set calendar-enabled true
-   to activate it.
+   CALENDAR_ENABLED is currently false.
+   Run /watercooler admin set calendar-enabled true to activate.
 ```
 
-If it returns an error, see the Troubleshooting section at the bottom.
+If you see an auth error, check the three credential values and confirm IT clicked "Grant admin consent" in Step 3 of their setup.
 
 ---
 
-### Step 4 — Configure settings
-
-These all have sensible defaults. Adjust as needed:
+## Step 3 — Configure Settings
 
 ```
 /watercooler admin set calendar-enabled true
@@ -173,92 +179,75 @@ These all have sensible defaults. Adjust as needed:
 | Setting | Default | Notes |
 |---|---|---|
 | `calendar-enabled` | `false` | Master on/off switch |
-| `meeting-duration` | `15` | Minutes — 15 is the plan |
-| `booking-deadline` | `2.5` | Days before auto-book fires. Supports decimals — 2.5 = 60 hours |
+| `meeting-duration` | `15` | Minutes |
+| `booking-deadline` | `2.5` | Days before auto-book. Supports decimals — 2.5 = 60 hours. Example: matches sent Monday 10 AM → auto-book fires Wednesday 10 PM |
 
-> **How `booking-deadline` works in practice:**
-> If matches go out Monday at 10 AM and deadline is `2.5`, the auto-book fires Wednesday at 10 PM.
-> Use `2.0` for Wednesday 10 AM, `1.5` for Tuesday 10 PM, etc.
-
-All settings are shown in `/watercooler admin settings` alongside the existing ones.
+All settings appear in `/watercooler admin settings`.
 
 ---
 
-### Step 5 — Test with a dry run
-
-Run a dry run first — this will test the calendar lookup without sending any DMs or creating any invites:
+## Step 4 — Test with a Dry Run
 
 ```
 /watercooler admin dry-run
 ```
 
-The preview will now show whether calendar slots were found for each pair, alongside the match preview.
+The preview will now show whether calendar slots were found for each pair alongside the match preview. No DMs sent, no invites created.
 
 ---
 
-### Step 6 — Test with a real run (small group)
+## Step 5 — Test with a Real Run (Small Group)
 
-Before rolling out to everyone, test with just yourself and one other person:
-
-1. Make sure only 2 people are joined (`/watercooler admin participants`)
+1. Make sure only 2 people are joined: `/watercooler admin participants`
 2. Run `/watercooler admin run`
-3. Check the group DM — you should see the intro message followed by 3 suggested time slots as buttons
+3. Check the group DM — intro message + 3 time slot buttons should appear
 4. Click one — verify the calendar invite and Teams link arrive in Outlook
-5. Check `/watercooler admin recent-rounds` to confirm the booking status shows `confirmed`
+5. Confirm booking status: `/watercooler admin recent-rounds`
 
 ---
 
-## Part 3 — Business Hours Logic
-
-The app determines valid slots per person based on their local timezone (read from their Microsoft 365 profile). A slot is only suggested if it falls within **9 AM – 5 PM in each person's own timezone**.
-
-**Example — Alice in California (PT), Bob in Maine (ET):**
-- A slot at 12:00 PM ET (9:00 AM PT) is valid for both ✅
-- A slot at 8:00 AM ET (5:00 AM PT) is outside Alice's hours ❌
-- A slot at 6:00 PM ET (3:00 PM PT) is outside Bob's hours ❌
-- The practical overlap window is roughly **12:00 PM – 5:00 PM ET** (9:00 AM – 2:00 PM PT)
-
-No configuration needed — timezone is read automatically from each user's Microsoft profile.
-
----
-
-## Part 4 — What Employees See
-
-### The matching DM
-
-> 👋 Hi Alice and Bob! I've matched you for a Watercooler chat! ☕
->
-> 📅 Here are some times you're both free — click one to book it:
->
-> **Thu Jun 5 · 12:00–12:15 PM ET** &nbsp; `[Book this]`
-> **Fri Jun 6 · 2:00–2:15 PM ET** &nbsp;&nbsp;&nbsp; `[Book this]`
-> **Mon Jun 9 · 1:00–1:15 PM ET** &nbsp;&nbsp; `[Book this]`
->
-> `[See more times]`
-
-### After someone clicks
-
-> ✅ Booked! A calendar invite has been sent to both of you for **Thu Jun 5 at 12:00 PM ET** with a Teams meeting link.
-
-### Auto-book (if nobody clicks within the deadline)
-
-> 📅 We went ahead and scheduled a time for you: **Mon Jun 9 at 1:00 PM ET**. Calendar invite sent — check your Outlook!
-
-### If calendar access fails (fallback)
-
-> 📅 We couldn't access calendars right now — find a time that works and grab 15 minutes for a coffee chat!
-
----
-
-## Part 5 — Turning It Off
-
-To disable calendar integration without removing the credentials:
+## Turning It Off
 
 ```
 /watercooler admin set calendar-enabled false
 ```
 
-All future rounds will fall back to the regular intro DM. Existing bookings already made are not affected.
+Future rounds fall back to the regular intro DM. Existing booked invites are not affected.
+
+---
+
+## Business Hours Logic
+
+Slots are filtered to **9 AM – 5 PM in each person's local timezone**, read automatically from their Microsoft 365 profile. No configuration needed.
+
+**Example — California (PT) + Maine (ET):**
+- 12:00 PM ET = 9:00 AM PT → valid for both ✅
+- 8:00 AM ET = 5:00 AM PT → too early for California ❌
+- Practical overlap: roughly **12:00 PM – 5:00 PM ET**
+
+---
+
+## What Employees See
+
+**In the group DM:**
+> 👋 Hi Alice and Bob! I've matched you for a Watercooler chat! ☕
+>
+> 📅 Here are some times you're both free:
+>
+> Thu Jun 5 · 12:00–12:15 PM ET &nbsp; `[Book this]`
+> Fri Jun 6 · 2:00–2:15 PM ET &nbsp;&nbsp;&nbsp; `[Book this]`
+> Mon Jun 9 · 1:00–1:15 PM ET &nbsp;&nbsp; `[Book this]`
+>
+> `[See more times]`
+
+**After someone clicks:**
+> ✅ Booked! A calendar invite has been sent to both of you for Thu Jun 5 at 12:00 PM ET with a Teams meeting link.
+
+**Auto-book (nobody clicked within deadline):**
+> 📅 We went ahead and scheduled a time for you: Mon Jun 9 at 1:00 PM ET. Calendar invite sent — check your Outlook!
+
+**Fallback (calendar access failed):**
+> 📅 We couldn't access calendars right now — find a time that works and grab 15 minutes for a coffee chat!
 
 ---
 
@@ -266,12 +255,12 @@ All future rounds will fall back to the regular intro DM. Existing bookings alre
 
 | Error | Likely cause | Fix |
 |---|---|---|
-| `AuthenticationError` on startup | Wrong `AZURE_CLIENT_ID` or `AZURE_CLIENT_SECRET` | Double-check the values in `.env` |
-| `Unauthorized` when reading calendars | Admin consent not granted | IT needs to click "Grant admin consent" in Azure portal (Part 1, Step 3) |
-| `User not found` for a specific person | User's email not found in Microsoft 365 | Confirm the user has an active Microsoft 365 account |
-| No slots found, always falls back | Calendars are fully booked for 3 weeks | Expected — fallback message is sent. Consider increasing look-ahead window |
-| `OnlineMeetings.ReadWrite` permission error | Teams meeting creation failed | Confirm IT added all four permissions, not just the Calendar ones |
-| Secret expired | Client secret passed its expiry date | IT creates a new secret in Azure portal, developer updates `AZURE_CLIENT_SECRET` in `.env` |
+| `AuthenticationError` on startup | Wrong credential values in `.env` | Double-check all three values |
+| `Unauthorized` when reading calendars | Admin consent not granted | IT clicks "Grant admin consent" in Azure portal → API permissions |
+| `User not found` for a specific person | No Microsoft 365 account for that user | Confirm they have an active M365 account |
+| No slots found, always falls back | Both calendars fully booked for 3 weeks | Expected — fallback message sent automatically |
+| `OnlineMeetings.ReadWrite` error | Teams permission missing | IT confirms all 4 permissions were added, not just the Calendar ones |
+| Credentials stop working after ~24 months | Client secret expired | IT creates a new secret, developer updates `AZURE_CLIENT_SECRET` in `.env` |
 
 ---
 
@@ -279,11 +268,11 @@ All future rounds will fall back to the regular intro DM. Existing bookings alre
 
 | Variable | Where to find it | Who provides it |
 |---|---|---|
-| `AZURE_TENANT_ID` | Azure portal → App registrations → your app → Directory (tenant) ID | IT |
-| `AZURE_CLIENT_ID` | Azure portal → App registrations → your app → Application (client) ID | IT |
-| `AZURE_CLIENT_SECRET` | Azure portal → App registrations → your app → Certificates & secrets | IT |
-| `CALENDAR_ENABLED` | Set in `.env` | Developer |
+| `AZURE_TENANT_ID` | Azure portal → App registrations → Overview → Directory (tenant) ID | IT |
+| `AZURE_CLIENT_ID` | Azure portal → App registrations → Overview → Application (client) ID | IT |
+| `AZURE_CLIENT_SECRET` | Azure portal → App registrations → Certificates & secrets | IT |
+| `CALENDAR_ENABLED` | `.env` on the server | Developer |
 
 ---
 
-*Related: [docs/PRODUCTION.md](PRODUCTION.md) — general deployment guide*
+*Related: [PRODUCTION.md](PRODUCTION.md) — general deployment guide*
