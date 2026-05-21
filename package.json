@@ -16,7 +16,8 @@
     "test": "node --test --disable-warning=ExperimentalWarning tests/matching.test.js",
     "test:calendar": "node --disable-warning=ExperimentalWarning scripts/test-calendar-connection.js",
     "test:calendar-settings": "node --disable-warning=ExperimentalWarning scripts/test-calendar-settings.js",
-    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:calendar && npm run test:calendar-settings"
+    "test:calendar-reader": "node --disable-warning=ExperimentalWarning scripts/test-calendar-reader.js",
+    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:calendar && npm run test:calendar-settings && npm run test:calendar-reader"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",
