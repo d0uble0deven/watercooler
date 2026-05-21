@@ -138,6 +138,8 @@ The gaps vs. Donut fall into three tiers of priority:
 
 | Gap | Notes |
 |---|---|
+| **Auto-enroll new hires (opt-out by default)** | **Decided: build next.** Listen for Slack's `team_join` event, auto-create the user as active, send a welcome DM explaining the program and how to leave. Matches how Donut works — higher participation without requiring action from new employees. |
+| **Outlook calendar integration + Teams auto-booking** | **Decided: build after auto-enroll.** See `docs/OUTLOOK_INTEGRATION.md` for the full plan. After matching, app reads both calendars, suggests 3+ free 15-min slots in the DM as clickable buttons, creates a Teams invite when one person confirms. Auto-books after 2.5 days (configurable, supports decimals) if nobody responds. Disabled by default behind `CALENDAR_ENABLED` flag — requires one-time Azure AD setup with IT. |
 | Participation rate tracking | Track whether matched users confirm they met |
 | CSV export of match history | Query the SQLite DB and format as CSV |
 | Smart matching (avoid pairing people already in the same channels) | Requires reading Slack channel membership at match time |

@@ -11,6 +11,7 @@ Internal Slack app for casual 1:1 social matching — similar to Donut, self-hos
 | [docs/SLACK_CONCEPTS.md](docs/SLACK_CONCEPTS.md) | Plain-English guide to every Slack concept used in this app |
 | [docs/PRODUCTION.md](docs/PRODUCTION.md) | Step-by-step deployment guide — Slack setup, scopes, hosting, monitoring |
 | [docs/DONUT_COMPARISON.md](docs/DONUT_COMPARISON.md) | Feature comparison vs. Donut, and a prioritised list of future additions |
+| [docs/OUTLOOK_INTEGRATION.md](docs/OUTLOOK_INTEGRATION.md) | Outlook calendar + Teams auto-booking setup guide (IT + developer steps) |
 
 ---
 

@@ -30,7 +30,7 @@ const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin recent-rounds\` — last few match rounds
 • \`/watercooler admin set group-size <n>\`
 • \`/watercooler admin set avoid-repeat-rounds <n>\`
-• \`/watercooler admin set cadence weekly|biweekly|monthly\`
+• \`/watercooler admin set cadence weekly|biweekly|triweekly|monthly\`
 • \`/watercooler admin set channel <channel-id>\`
 • \`/watercooler admin exclude @user\` — prevent user from being matched
 • \`/watercooler admin include @user\` — lift an exclusion`;

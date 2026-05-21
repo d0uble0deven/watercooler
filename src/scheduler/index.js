@@ -65,10 +65,11 @@ function shouldRunNow(cadence, lastRoundDate) {
     (Date.now() - new Date(lastRoundDate).getTime()) / (1000 * 60 * 60 * 24);
 
   switch ((cadence || 'weekly').toLowerCase()) {
-    case 'weekly':   return daysSinceLast >= 6;   // 7 days minus 1-day grace
-    case 'biweekly': return daysSinceLast >= 13;  // 14 days minus 1-day grace
-    case 'monthly':  return daysSinceLast >= 27;  // handles 28–31 day months
-    default:         return true;
+    case 'weekly':     return daysSinceLast >= 6;   // 7 days minus 1-day grace
+    case 'biweekly':   return daysSinceLast >= 13;  // 14 days minus 1-day grace
+    case 'triweekly':  return daysSinceLast >= 20;  // 21 days minus 1-day grace
+    case 'monthly':    return daysSinceLast >= 27;  // handles 28–31 day months
+    default:           return true;
   }
 }
 

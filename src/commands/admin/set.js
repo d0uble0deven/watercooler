@@ -16,7 +16,7 @@ const SET_HELP = [
   '*Available settings:*',
   '• `/watercooler admin set group-size <n>` — pair size (must be ≥ 2)',
   '• `/watercooler admin set avoid-repeat-rounds <n>` — repeat-avoidance window (0 = off)',
-  '• `/watercooler admin set cadence weekly|biweekly|monthly`',
+  '• `/watercooler admin set cadence weekly|biweekly|triweekly|monthly`',
   '• `/watercooler admin set channel <channel-id>` — channel for automated announcements',
   '• `/watercooler admin set intro-day <day>` — day the scheduler fires (e.g. `monday`)',
   '• `/watercooler admin set intro-time <HH:MM>` — time the scheduler fires (24-hour)',
@@ -65,10 +65,10 @@ async function setAvoidRepeatRounds(value, respond) {
 }
 
 async function setCadence(value, respond) {
-  const VALID = ['weekly', 'biweekly', 'monthly'];
+  const VALID = ['weekly', 'biweekly', 'triweekly', 'monthly'];
   const normalised = (value || '').toLowerCase();
   if (!VALID.includes(normalised)) {
-    await respond(`❌ Cadence must be one of: ${VALID.map((v) => `\`${v}\``).join(', ')}.\nExample: \`/watercooler admin set cadence weekly\``);
+    await respond(`❌ Cadence must be one of: ${VALID.map((v) => `\`${v}\``).join(', ')}.\nExample: \`/watercooler admin set cadence triweekly\``);
     return;
   }
   updateSettings({ cadence: normalised });

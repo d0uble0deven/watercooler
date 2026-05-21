@@ -123,10 +123,17 @@ npm start
 Expected output:
 ```
 ✅ Database ready: ./data/watercooler.db
+[INFO]  socket-mode:SocketModeClient:0 Going to establish a new connection to Slack ...
 🚀 Watercooler running on http://localhost:3000
+   Health check → http://localhost:3000/health
 ⚡️ Slack Bolt connected via Socket Mode
-[Scheduler] Started — checking every minute for a scheduled run.
+[Scheduler] Disabled — set SCHEDULING_ENABLED=true in .env to enable.
+[INFO]  socket-mode:SocketModeClient:0 Now connected to Slack
 ```
+
+> The `[INFO]` lines are normal Bolt logging as the WebSocket connects.
+> The scheduler will show `Disabled` until you set `SCHEDULING_ENABLED=true` — that's the safe default.
+> Once scheduling is enabled it will read `[Scheduler] Started — checking every minute for a scheduled run.`
 
 If you see `⚠️ ADMIN_USER_IDS is not set`, add your Slack user ID to `.env` and restart.
 

@@ -107,8 +107,14 @@ async function main() {
 
     // Ran 14 days ago
     const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-    check('biweekly, 14 days ago → true',  shouldRunNow('biweekly', fourteenDaysAgo) === true);
-    check('monthly,  14 days ago → false', shouldRunNow('monthly',  fourteenDaysAgo) === false);
+    check('biweekly,   14 days ago → true',  shouldRunNow('biweekly',   fourteenDaysAgo) === true);
+    check('triweekly,  14 days ago → false', shouldRunNow('triweekly',  fourteenDaysAgo) === false);
+    check('monthly,    14 days ago → false', shouldRunNow('monthly',    fourteenDaysAgo) === false);
+
+    // Ran 21 days ago
+    const twentyOneDaysAgo = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString();
+    check('triweekly,  21 days ago → true',  shouldRunNow('triweekly',  twentyOneDaysAgo) === true);
+    check('monthly,    21 days ago → false', shouldRunNow('monthly',    twentyOneDaysAgo) === false);
 
     // Ran 28 days ago
     const twentyEightDaysAgo = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString();

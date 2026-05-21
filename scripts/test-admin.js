@@ -176,8 +176,11 @@ async function main() {
   // ── set cadence ─────────────────────────────────────────────────────────────
   console.log('\nset cadence');
   {
-    const ok = await runCmd('set cadence biweekly');
-    check('accepts biweekly',         ok.includes('✅') && ok.includes('biweekly'), ok);
+    const ok1 = await runCmd('set cadence biweekly');
+    check('accepts biweekly',         ok1.includes('✅') && ok1.includes('biweekly'), ok1);
+
+    const ok2 = await runCmd('set cadence triweekly');
+    check('accepts triweekly',        ok2.includes('✅') && ok2.includes('triweekly'), ok2);
 
     const bad = await runCmd('set cadence daily');
     check('rejects unknown cadence',  bad.includes('❌'), bad);
