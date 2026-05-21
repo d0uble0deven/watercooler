@@ -96,21 +96,44 @@ const SCHEMA = `
 
 `;
 
+// ── Migrations ────────────────────────────────────────────────────────────────
+// ALTER TABLE can't use IF NOT EXISTS, so we attempt each column and swallow
+// the "duplicate column name" error that SQLite throws when it already exists.
+
+const MIGRATIONS = [
+  `ALTER TABLE settings ADD COLUMN calendar_enabled  INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE settings ADD COLUMN meeting_duration  INTEGER NOT NULL DEFAULT 30`,
+  `ALTER TABLE settings ADD COLUMN booking_deadline  REAL    NOT NULL DEFAULT 2.5`,
+];
+
+function runMigrations(db) {
+  for (const sql of MIGRATIONS) {
+    try {
+      db.exec(sql);
+    } catch (err) {
+      // "duplicate column name" is expected when running on an existing DB
+      if (!err.message.includes('duplicate column name')) throw err;
+    }
+  }
+}
+
 // ── Init function ─────────────────────────────────────────────────────────────
 
 function initDb() {
   const db = getDb();
 
   db.exec(SCHEMA);
+  runMigrations(db);
 
   // There should always be exactly one settings row.
   // Seed it on first init with sensible defaults.
   const { count } = db.prepare('SELECT COUNT(*) AS count FROM settings').get();
   if (count === 0) {
     db.prepare(`
-      INSERT INTO settings (group_size, avoid_repeat_rounds, cadence, intro_day, intro_time)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(2, 4, 'weekly', 'monday', '09:00');
+      INSERT INTO settings (group_size, avoid_repeat_rounds, cadence, intro_day, intro_time,
+                            calendar_enabled, meeting_duration, booking_deadline)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(2, 4, 'weekly', 'monday', '09:00', 0, 30, 2.5);
     console.log('  → Default settings row created');
   }
 
