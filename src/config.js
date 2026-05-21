@@ -18,8 +18,16 @@ const config = {
   // SQLite database path (used starting Phase 2)
   databasePath: process.env.DATABASE_PATH || './data/watercooler.db',
 
-  // Scheduling (used in Phase 8)
+  // Scheduling (Phase 8)
   schedulingEnabled: process.env.SCHEDULING_ENABLED === 'true',
+
+  // Microsoft Graph / Outlook calendar integration (Phase 10+)
+  // Credentials provided by IT after Azure AD app registration.
+  // See docs/OUTLOOK_INTEGRATION.md for setup instructions.
+  azureTenantId:     process.env.AZURE_TENANT_ID     || null,
+  azureClientId:     process.env.AZURE_CLIENT_ID     || null,
+  azureClientSecret: process.env.AZURE_CLIENT_SECRET || null,
+  calendarEnabled:   process.env.CALENDAR_ENABLED === 'true',
 };
 
 // True only when all three Slack secrets are present.

@@ -9,16 +9,17 @@
 // Phase 6:  run
 // Phase 7:  summary, participants, paused, settings, recent-rounds, set, exclude, include
 
-const { isAdmin }       = require('../../lib/adminGuard');
-const dryRun            = require('./dry-run');
-const run               = require('./run');
-const summary           = require('./summary');
-const participants      = require('./participants');
-const paused            = require('./paused');
-const showSettings      = require('./show-settings');
-const recentRounds      = require('./recent-rounds');
-const set               = require('./set');
+const { isAdmin }          = require('../../lib/adminGuard');
+const dryRun               = require('./dry-run');
+const run                  = require('./run');
+const summary              = require('./summary');
+const participants         = require('./participants');
+const paused               = require('./paused');
+const showSettings         = require('./show-settings');
+const recentRounds         = require('./recent-rounds');
+const set                  = require('./set');
 const { exclude, include } = require('./exclusions');
+const calendarStatus       = require('./calendar-status');
 
 const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin dry-run\` — preview matches without sending DMs
@@ -33,7 +34,8 @@ const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin set cadence weekly|biweekly|triweekly|monthly\`
 • \`/watercooler admin set channel <channel-id>\`
 • \`/watercooler admin exclude @user\` — prevent user from being matched
-• \`/watercooler admin include @user\` — lift an exclusion`;
+• \`/watercooler admin include @user\` — lift an exclusion
+• \`/watercooler admin calendar-status\` — check Microsoft Graph connection`;
 
 // `client` is Bolt's Web API client — only needed by commands that call Slack
 // (currently just `run`). Read-only commands don't use it.
@@ -86,6 +88,9 @@ async function handleAdmin(command, text, respond, client) {
 
       case 'include':
         return await include(command, args, respond);
+
+      case 'calendar-status':
+        return await calendarStatus(command, respond);
 
       default:
         return await respond(ADMIN_HELP);
