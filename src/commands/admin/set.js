@@ -12,6 +12,7 @@
 //   set calendar-enabled true|false — toggle Outlook calendar integration
 //   set meeting-duration <minutes>  — 15 | 30 | 45 | 60
 //   set booking-deadline <days>     — decimal days before intro DM to auto-book (e.g. 2.5)
+//   set calendar-timezone <tz>      — IANA timezone for meeting time display (e.g. America/Chicago)
 
 const { updateSettings } = require('../../lib/rounds');
 
@@ -28,6 +29,7 @@ const SET_HELP = [
   '• `/watercooler admin set calendar-enabled true|false` — toggle Outlook calendar integration',
   '• `/watercooler admin set meeting-duration <minutes>` — 15, 30, 45, or 60',
   '• `/watercooler admin set booking-deadline <days>` — days before intro to auto-book (e.g. `2.5`)',
+  '• `/watercooler admin set calendar-timezone <tz>` — IANA timezone for meeting time display (e.g. `America/Chicago`)',
 ].join('\n');
 
 async function set(command, args, respond) {
@@ -45,6 +47,7 @@ async function set(command, args, respond) {
     case 'calendar-enabled':    return await setCalendarEnabled(value, respond);
     case 'meeting-duration':    return await setMeetingDuration(value, respond);
     case 'booking-deadline':    return await setBookingDeadline(value, respond);
+    case 'calendar-timezone':   return await setCalendarTimezone(value, respond);
     default:
       return await respond(
         `❌ Unknown setting: \`${setting || '(none)'}\`\n\n${SET_HELP}`
@@ -188,6 +191,30 @@ async function setBookingDeadline(value, respond) {
     `✅ Booking deadline updated to *${n} day${n === 1 ? '' : 's'}* _(${hours} hours)_ before the intro DM.\n` +
     '_If no time is chosen by then, a slot will be auto-booked._'
   );
+}
+
+async function setCalendarTimezone(value, respond) {
+  const tz = (value || '').trim();
+  if (!tz) {
+    await respond(
+      '❌ Please provide an IANA timezone.\n' +
+      'Example: `/watercooler admin set calendar-timezone America/Chicago`\n' +
+      '_Common values: `America/New_York`, `America/Chicago`, `America/Denver`, `America/Los_Angeles`, `UTC`_'
+    );
+    return;
+  }
+  // Validate using the built-in Intl API — throws RangeError for unknown timezones
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+  } catch (_) {
+    await respond(
+      `❌ \`${tz}\` is not a recognised IANA timezone.\n` +
+      'Examples: `America/New_York`, `America/Chicago`, `America/Los_Angeles`, `Europe/London`, `UTC`'
+    );
+    return;
+  }
+  updateSettings({ calendar_timezone: tz });
+  await respond(`✅ Calendar timezone updated to *${tz}*. Meeting times will display in this timezone.`);
 }
 
 module.exports = set;

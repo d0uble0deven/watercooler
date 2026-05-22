@@ -89,10 +89,11 @@ async function autoBookMatch(client, graphClient, match, settings) {
   saveBooking(match.id, { calendarEventId: booking.eventId, teamsLink: booking.teamsLink });
   console.log(`[calendarAutoBooker] Match ${match.id} auto-booked → event ${booking.eventId}`);
 
+  const tz = settings.calendar_timezone ?? config.calendarTimezone;
   await postOrUpdate(
     client, match,
     '⏰ Meeting auto-booked!',
-    buildAutoBookedMessage(booking, users, config.calendarTimezone)
+    buildAutoBookedMessage(booking, users, tz)
   );
 }
 

@@ -73,7 +73,8 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings) 
   }
 
   // ── Post interactive message ──────────────────────────────────────────────
-  const blocks = buildSuggestionsMessage(slots, matchId, config.calendarTimezone);
+  const tz     = settings.calendar_timezone ?? config.calendarTimezone;
+  const blocks = buildSuggestionsMessage(slots, matchId, tz);
 
   try {
     const result = await client.chat.postMessage({

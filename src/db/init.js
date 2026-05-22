@@ -113,6 +113,8 @@ const MIGRATIONS = [
   `ALTER TABLE matches ADD COLUMN booked_at             TEXT`,
   // Phase 10 Step 7 — store suggestion message ts so auto-booker can update in-place
   `ALTER TABLE matches ADD COLUMN calendar_suggestion_ts TEXT`,
+  // Phase 10 Step 8 — per-tenant timezone for calendar display
+  `ALTER TABLE settings ADD COLUMN calendar_timezone  TEXT    NOT NULL DEFAULT 'America/New_York'`,
 ];
 
 function runMigrations(db) {
@@ -140,9 +142,9 @@ function initDb() {
   if (count === 0) {
     db.prepare(`
       INSERT INTO settings (group_size, avoid_repeat_rounds, cadence, intro_day, intro_time,
-                            calendar_enabled, meeting_duration, booking_deadline)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(2, 4, 'weekly', 'monday', '09:00', 0, 30, 2.5);
+                            calendar_enabled, meeting_duration, booking_deadline, calendar_timezone)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(2, 4, 'weekly', 'monday', '09:00', 0, 30, 2.5, 'America/New_York');
     console.log('  → Default settings row created');
   }
 

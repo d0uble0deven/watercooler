@@ -15,6 +15,7 @@
 const { formatSlotLabel }  = require('./calendarScheduler');
 const { formatNameList }   = require('../slack/messaging');
 const { toGraphDateTime }  = require('./calendarReader');
+const { withRetry }        = require('../lib/retryHelper');
 
 // ── Booking ───────────────────────────────────────────────────────────────────
 
@@ -55,9 +56,11 @@ async function bookMeeting(graphClient, users, slotStart, slotEnd) {
     onlineMeetingProvider: 'teamsForBusiness',
   };
 
-  const event = await graphClient
-    .api(`/users/${encodeURIComponent(organizer.slack_email)}/events`)
-    .post(eventPayload);
+  const event = await withRetry(() =>
+    graphClient
+      .api(`/users/${encodeURIComponent(organizer.slack_email)}/events`)
+      .post(eventPayload)
+  );
 
   return {
     eventId:   event.id,

@@ -11,7 +11,8 @@
 //   3. Connected successfully → confirms ready, shows current CALENDAR_ENABLED state
 
 const { getGraphClient, hasAzureCredentials } = require('../../integrations/msGraph');
-const config = require('../../config');
+const { getSettings }                         = require('../../lib/rounds');
+const config                                  = require('../../config');
 
 async function calendarStatus(command, respond) {
 
@@ -39,14 +40,24 @@ async function calendarStatus(command, respond) {
     await client.api('/organization').select('displayName').get();
 
     // ── 3. Connected ────────────────────────────────────────────────────────────
-    const enabledLine = config.calendarEnabled
-      ? '`CALENDAR_ENABLED` is *true* — calendar integration is active.'
-      : '`CALENDAR_ENABLED` is *false* — integration is ready but not yet active.\nRun `/watercooler admin set calendar-enabled true` to turn it on.';
+    const s          = getSettings();
+    const calEnabled = s.calendar_enabled;
+    const dl         = s.booking_deadline ?? 2.5;
+    const hours      = Math.floor(dl) * 24 + (dl % 1) * 8;
+    const tz         = s.calendar_timezone ?? 'America/New_York';
+
+    const statusLine = calEnabled
+      ? '*enabled* ✅ — meeting suggestions are active'
+      : '*disabled* — run `/watercooler admin set calendar-enabled true` to activate';
 
     await respond([
       '✅ *Microsoft Graph connected — calendar integration is ready.*',
       '',
-      enabledLine,
+      '*Current calendar settings:*',
+      `• Integration:      ${statusLine}`,
+      `• Meeting duration: *${s.meeting_duration ?? 30} min*`,
+      `• Booking deadline: *${dl} day(s)* _(${hours}h)_`,
+      `• Timezone:         *${tz}*`,
     ].join('\n'));
 
   } catch (err) {
