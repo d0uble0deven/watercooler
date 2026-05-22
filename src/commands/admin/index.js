@@ -12,6 +12,7 @@
 const { isAdmin }          = require('../../lib/adminGuard');
 const dryRun               = require('./dry-run');
 const run                  = require('./run');
+const testRun              = require('./test-run');
 const summary              = require('./summary');
 const participants         = require('./participants');
 const paused               = require('./paused');
@@ -23,6 +24,7 @@ const calendarStatus       = require('./calendar-status');
 
 const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin dry-run\` — preview matches without sending DMs
+• \`/watercooler admin test-run\` — same as run, but all messages include a 🧪 test disclaimer
 • \`/watercooler admin run\` — run matching and send intro DMs
 • \`/watercooler admin summary\` — participant counts at a glance
 • \`/watercooler admin participants\` — list eligible participants
@@ -64,6 +66,9 @@ async function handleAdmin(command, text, respond, client) {
 
       case 'run':
         return await run(command, respond, client);
+
+      case 'test-run':
+        return await testRun(command, respond, client);
 
       case 'summary':
         return await summary(command, respond);

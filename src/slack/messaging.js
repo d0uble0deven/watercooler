@@ -36,9 +36,11 @@ async function openGroupDm(client, slackUserIds) {
 /**
  * Posts the Watercooler intro message into a DM channel.
  * Required scope: chat:write
+ *
+ * @param {boolean} testMode  When true, appends a "this is a test" note
  */
-async function postIntroMessage(client, channelId, users) {
-  const text = buildIntroMessage(users);
+async function postIntroMessage(client, channelId, users, testMode = false) {
+  const text = buildIntroMessage(users, testMode);
 
   const result = await client.chat.postMessage({
     channel: channelId,
@@ -55,8 +57,11 @@ async function postIntroMessage(client, channelId, users) {
 /**
  * Builds the intro message for a match group.
  * Exported so it can be unit tested without a Slack client.
+ *
+ * @param {object[]} users
+ * @param {boolean}  testMode  When true, appends a test-run disclaimer
  */
-function buildIntroMessage(users) {
+function buildIntroMessage(users, testMode = false) {
   const names  = formatNameList(users.map((u) => u.display_name));
   const isTrio = users.length > 2;
 
@@ -64,7 +69,11 @@ function buildIntroMessage(users) {
     ? "I've matched you all for a Watercooler chat! Find a time that works for everyone and have a virtual coffee. ☕"
     : "I've matched you for a Watercooler chat! Find a time that works for you both and catch up. ☕";
 
-  return `👋 Hi ${names}! ${body}`;
+  const intro = `👋 Hi ${names}! ${body}`;
+
+  return testMode
+    ? `${intro}\n\n_🧪 *Test run* — we're verifying the full system. Please try clicking a meeting time below to help us test the booking flow. You won't actually need to meet up, and you can delete this message once you're done. Thank you!_`
+    : intro;
 }
 
 /**

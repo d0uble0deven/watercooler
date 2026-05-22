@@ -40,8 +40,9 @@ const { saveSuggestionTs } = require('../lib/rounds');
  * @param {number}   matchId    DB match ID (encoded in button values for Step 6)
  * @param {object[]} users      Array of user rows from the DB
  * @param {object}   settings   App settings row (calendar_enabled, meeting_duration)
+ * @param {boolean}  testMode   When true, adds a test disclaimer to the posted message
  */
-async function suggestMeetingTimes(client, channelId, matchId, users, settings) {
+async function suggestMeetingTimes(client, channelId, matchId, users, settings, testMode = false) {
   // ── Guard: feature flags ──────────────────────────────────────────────────
   if (!settings.calendar_enabled) return;
 
@@ -74,7 +75,7 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings) 
 
   // ── Post interactive message ──────────────────────────────────────────────
   const tz     = settings.calendar_timezone ?? config.calendarTimezone;
-  const blocks = buildSuggestionsMessage(slots, matchId, tz);
+  const blocks = buildSuggestionsMessage(slots, matchId, tz, testMode);
 
   try {
     const result = await client.chat.postMessage({
@@ -177,10 +178,11 @@ function addBusinessDays(date, n) {
  *
  * @param {Array<{start: Date, end: Date}>} slots
  * @param {number} matchId
- * @param {string} timezoneId  IANA timezone for display (e.g. 'America/New_York')
+ * @param {string}  timezoneId  IANA timezone for display (e.g. 'America/New_York')
+ * @param {boolean} testMode    When true, adds a test disclaimer to the context block
  * @returns {object[]}  Slack blocks array
  */
-function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC') {
+function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC', testMode = false) {
   const tzAbbr = getTzAbbr(slots[0].start, timezoneId);
 
   const buttons = slots.map((slot, i) => ({
@@ -218,6 +220,10 @@ function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC') {
           type: 'mrkdwn',
           text: `_All times in ${tzAbbr}. If none of these work, coordinate directly in this chat._`,
         },
+        ...(testMode ? [{
+          type: 'mrkdwn',
+          text: '_🧪 Test run — please click a slot to help us test the booking flow! No real meeting required._',
+        }] : []),
       ],
     },
   ];

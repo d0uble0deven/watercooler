@@ -32,7 +32,8 @@ const { createMatches }                    = require('../../matching/engine');
 const { openGroupDm, postIntroMessage }    = require('../../slack/messaging');
 const { suggestMeetingTimes }              = require('../../integrations/calendarScheduler');
 
-async function run(command, respond, client) {
+async function run(command, respond, client, options = {}) {
+  const { testMode = false } = options;
 
   // ── 1. Duplicate-round guard ───────────────────────────────────────────────
   if (isRoundInProgress()) {
@@ -69,7 +70,9 @@ async function run(command, respond, client) {
 
   // Acknowledge immediately — tells the admin something is happening
   await respond(
-    `🚀 Starting Watercooler round — *${eligible.length} participants* → *${groups.length} groups*...`
+    testMode
+      ? `🧪 Starting *test* Watercooler round — *${eligible.length} participants* → *${groups.length} groups*...\n_All messages will include a test disclaimer._`
+      : `🚀 Starting Watercooler round — *${eligible.length} participants* → *${groups.length} groups*...`
   );
 
   // ── 4. Create round record ─────────────────────────────────────────────────
@@ -89,7 +92,7 @@ async function run(command, respond, client) {
       const channelId = await openGroupDm(client, userIds);
 
       // Post the intro message
-      await postIntroMessage(client, channelId, group.users);
+      await postIntroMessage(client, channelId, group.users, testMode);
 
       // Persist everything to the database
       const matchId = saveMatch(roundId);
@@ -101,7 +104,7 @@ async function run(command, respond, client) {
       // Posts a follow-up message with 3 suggested meeting times as Slack buttons.
       // Runs after the DB writes so matchId is available for button encoding.
       // All failures are caught inside suggestMeetingTimes — never blocks the round.
-      await suggestMeetingTimes(client, channelId, matchId, group.users, settings);
+      await suggestMeetingTimes(client, channelId, matchId, group.users, settings, testMode);
 
       successCount++;
       console.log(`[admin run] ✅ Matched: ${names} → channel ${channelId}`);
@@ -121,11 +124,16 @@ async function run(command, respond, client) {
   // workspace can see that a Watercooler round just happened.
   if (settings.intro_channel_id && client && successCount > 0) {
     try {
+      const channelText = testMode
+        ? `🧪 *[Test run]* 🎉 *Watercooler round #${roundId} is live!* ` +
+          `*${successCount} group(s)* have been matched. ` +
+          `Participants have been asked to try the full booking flow — no real meetings required!`
+        : `🎉 *Watercooler round #${roundId} is live!* ` +
+          `*${successCount} group(s)* have been matched — check your DMs for your intro. ☕`;
+
       await client.chat.postMessage({
         channel: settings.intro_channel_id,
-        text:
-          `🎉 *Watercooler round #${roundId} is live!* ` +
-          `*${successCount} group(s)* have been matched — check your DMs for your intro. ☕`,
+        text:    channelText,
       });
     } catch (err) {
       // Non-fatal — the round completed successfully; just log the failure.
@@ -136,9 +144,13 @@ async function run(command, respond, client) {
   // ── 8. Report to admin ─────────────────────────────────────────────────────
   if (failures.length === 0) {
     await respond(
-      `✅ *Round complete!*\n` +
-      `${successCount} group(s) matched and notified.\n` +
-      `_Round #${roundId} — use \`/watercooler admin recent-rounds\` to see history._`
+      testMode
+        ? `🧪 *Test round complete!*\n` +
+          `${successCount} group(s) matched and notified — all messages included a test disclaimer.\n` +
+          `_Round #${roundId} — use \`/watercooler admin recent-rounds\` to see history._`
+        : `✅ *Round complete!*\n` +
+          `${successCount} group(s) matched and notified.\n` +
+          `_Round #${roundId} — use \`/watercooler admin recent-rounds\` to see history._`
     );
   } else {
     await respond(
