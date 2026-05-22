@@ -235,6 +235,41 @@ function getMatchUsers(matchId) {
 }
 
 /**
+ * Saves the Slack message timestamp of the calendar-suggestion message.
+ * Stored so the auto-booker can update the original message in-place rather
+ * than posting a new one.
+ */
+function saveSuggestionTs(matchId, ts) {
+  getDb()
+    .prepare(`UPDATE matches SET calendar_suggestion_ts = ? WHERE id = ?`)
+    .run(ts, matchId);
+}
+
+/**
+ * Returns all unbooked matches whose parent round completed more than
+ * `deadlineHours` ago. These are candidates for auto-booking.
+ *
+ * Only includes matches that:
+ *   - Have a DM channel (so we can post to them)
+ *   - Are NOT already booked
+ *   - Belong to a completed round older than the deadline
+ */
+function getUnbookedMatchesPastDeadline(deadlineHours) {
+  const cutoff = new Date(Date.now() - deadlineHours * 60 * 60 * 1000).toISOString();
+  return getDb()
+    .prepare(`
+      SELECT m.*
+      FROM   matches m
+      JOIN   rounds r ON r.id = m.round_id
+      WHERE  m.calendar_event_id    IS NULL
+        AND  m.slack_dm_channel_id  IS NOT NULL
+        AND  r.status = 'completed'
+        AND  r.completed_at < ?
+    `)
+    .all(cutoff);
+}
+
+/**
  * Persists the calendar event ID, Teams link, and booking timestamp on a match row.
  * Called immediately after the Graph API event is created.
  */
@@ -306,4 +341,6 @@ module.exports = {
   getMatch,
   getMatchUsers,
   saveBooking,
+  saveSuggestionTs,
+  getUnbookedMatchesPastDeadline,
 };

@@ -16,11 +16,12 @@
 //   • CALENDAR_ENABLED=true in .env (or set via admin command)
 //   • Slack app has the `users:read.email` scope (add in api.slack.com → OAuth & Permissions)
 
-const config             = require('../config');
-const { getGraphClient } = require('./msGraph');
-const { getFreeBusy }    = require('./calendarReader');
-const { findSlots }      = require('../lib/slotFinder');
-const { saveUserEmail }  = require('../lib/users');
+const config               = require('../config');
+const { getGraphClient }   = require('./msGraph');
+const { getFreeBusy }      = require('./calendarReader');
+const { findSlots }        = require('../lib/slotFinder');
+const { saveUserEmail }    = require('../lib/users');
+const { saveSuggestionTs } = require('../lib/rounds');
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -75,11 +76,13 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings) 
   const blocks = buildSuggestionsMessage(slots, matchId, config.calendarTimezone);
 
   try {
-    await client.chat.postMessage({
+    const result = await client.chat.postMessage({
       channel: channelId,
       text:    '📅 Here are some times that work for your meeting!',  // fallback for notifications
       blocks,
     });
+    // Store the message ts so the auto-booker can update this message in-place
+    if (result?.ts) saveSuggestionTs(matchId, result.ts);
     console.log(`[calendarScheduler] Posted ${slots.length} slot suggestion(s) for match ${matchId}.`);
   } catch (err) {
     console.error(`[calendarScheduler] Failed to post suggestions for match ${matchId}:`, err.message);

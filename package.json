@@ -20,7 +20,8 @@
     "test:slot-finder": "node --disable-warning=ExperimentalWarning scripts/test-slot-finder.js",
     "test:step5": "node --disable-warning=ExperimentalWarning scripts/test-calendar-step5.js",
     "test:step6": "node --disable-warning=ExperimentalWarning scripts/test-calendar-step6.js",
-    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:calendar && npm run test:calendar-settings && npm run test:calendar-reader && npm run test:slot-finder && npm run test:step5 && npm run test:step6"
+    "test:step7": "node --disable-warning=ExperimentalWarning scripts/test-calendar-step7.js",
+    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:calendar && npm run test:calendar-settings && npm run test:calendar-reader && npm run test:slot-finder && npm run test:step5 && npm run test:step6 && npm run test:step7"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",

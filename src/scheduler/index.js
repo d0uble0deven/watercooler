@@ -95,6 +95,12 @@ function startScheduler(app) {
       const settings = getSettings();
       const now      = new Date();
 
+      // ── Auto-booking check ─────────────────────────────────────────────────
+      // Runs every tick regardless of day/time — finds any match past its booking
+      // deadline and books a slot automatically. No-op if calendar disabled.
+      const { runAutoBooking } = require('../integrations/calendarAutoBooker');
+      await runAutoBooking(app.client, settings);
+
       const { hour, minute } = parseTime(settings.intro_time);
       const dayNum           = parseDayToNumber(settings.intro_day);
 
