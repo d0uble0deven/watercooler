@@ -207,6 +207,49 @@ function getParticipantCounts() {
   };
 }
 
+// ── Calendar booking ──────────────────────────────────────────────────────────
+
+/**
+ * Returns the full match row by ID (includes calendar_event_id if already booked).
+ */
+function getMatch(matchId) {
+  return getDb()
+    .prepare(`SELECT * FROM matches WHERE id = ?`)
+    .get(matchId);
+}
+
+/**
+ * Returns all user rows for a given match (via the match_members join).
+ * Used by the booking handler to build the attendee list.
+ */
+function getMatchUsers(matchId) {
+  return getDb()
+    .prepare(`
+      SELECT u.*
+      FROM   users u
+      JOIN   match_members mm ON mm.user_id = u.id
+      WHERE  mm.match_id = ?
+      ORDER  BY u.display_name
+    `)
+    .all(matchId);
+}
+
+/**
+ * Persists the calendar event ID, Teams link, and booking timestamp on a match row.
+ * Called immediately after the Graph API event is created.
+ */
+function saveBooking(matchId, { calendarEventId, teamsLink }) {
+  getDb()
+    .prepare(`
+      UPDATE matches
+      SET calendar_event_id = ?,
+          teams_link         = ?,
+          booked_at          = datetime('now')
+      WHERE id = ?
+    `)
+    .run(calendarEventId ?? null, teamsLink ?? null, matchId);
+}
+
 // ── Settings write ────────────────────────────────────────────────────────────
 
 /**
@@ -260,4 +303,7 @@ module.exports = {
   getParticipantCounts,
   updateSettings,
   cancelStuckRounds,
+  getMatch,
+  getMatchUsers,
+  saveBooking,
 };

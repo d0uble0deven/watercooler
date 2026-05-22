@@ -107,6 +107,10 @@ const MIGRATIONS = [
   `ALTER TABLE settings ADD COLUMN booking_deadline  REAL    NOT NULL DEFAULT 2.5`,
   // Phase 10 Step 5 — store Outlook email per user (populated on first match run)
   `ALTER TABLE users ADD COLUMN slack_email TEXT`,
+  // Phase 10 Step 6 — track calendar booking state per match
+  `ALTER TABLE matches ADD COLUMN calendar_event_id TEXT`,
+  `ALTER TABLE matches ADD COLUMN teams_link        TEXT`,
+  `ALTER TABLE matches ADD COLUMN booked_at         TEXT`,
 ];
 
 function runMigrations(db) {
