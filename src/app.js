@@ -73,6 +73,15 @@ async function start() {
   // Register all /watercooler subcommands (join, pause, resume, leave, status, …)
   registerCommands(app);
 
+  // ── Calendar slot booking buttons (Phase 10 Step 5 / Step 6) ────────────
+  // Handles clicks on the "Mon Jun 9, 9:00 – 9:30 AM" buttons posted in match DMs.
+  // Step 5: ack immediately (prevents Slack timeout) — the button stays active.
+  // Step 6: will parse action.value, create calendar invite + Teams link, update message.
+  app.action(/^watercooler_book_slot_\d+$/, async ({ ack }) => {
+    await ack();
+    // Full booking logic added in Step 6
+  });
+
   await app.start();
   console.log('⚡️ Slack Bolt connected via Socket Mode\n');
 

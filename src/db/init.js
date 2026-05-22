@@ -101,9 +101,12 @@ const SCHEMA = `
 // the "duplicate column name" error that SQLite throws when it already exists.
 
 const MIGRATIONS = [
+  // Phase 10 Step 2 — calendar settings
   `ALTER TABLE settings ADD COLUMN calendar_enabled  INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE settings ADD COLUMN meeting_duration  INTEGER NOT NULL DEFAULT 30`,
   `ALTER TABLE settings ADD COLUMN booking_deadline  REAL    NOT NULL DEFAULT 2.5`,
+  // Phase 10 Step 5 — store Outlook email per user (populated on first match run)
+  `ALTER TABLE users ADD COLUMN slack_email TEXT`,
 ];
 
 function runMigrations(db) {

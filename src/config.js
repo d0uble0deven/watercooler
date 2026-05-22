@@ -28,6 +28,11 @@ const config = {
   azureClientId:     process.env.AZURE_CLIENT_ID     || null,
   azureClientSecret: process.env.AZURE_CLIENT_SECRET || null,
   calendarEnabled:   process.env.CALENDAR_ENABLED === 'true',
+
+  // IANA timezone used when displaying suggested meeting times to users.
+  // Must be a valid Intl timezone string (e.g. 'America/New_York', 'America/Chicago').
+  // See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+  calendarTimezone:  process.env.CALENDAR_TIMEZONE  || 'America/New_York',
 };
 
 // True only when all three Slack secrets are present.

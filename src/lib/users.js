@@ -108,6 +108,17 @@ function removeExclusion(slackUserId) {
     .run(slackUserId);
 }
 
+// ── Calendar helpers ──────────────────────────────────────────────────────────
+
+// Caches a user's Outlook/Microsoft email address so we don't have to query
+// the Slack API on every match run. Called the first time we successfully
+// retrieve the email from Slack's users.info endpoint.
+function saveUserEmail(slackUserId, email) {
+  getDb()
+    .prepare(`UPDATE users SET slack_email = ?, updated_at = ? WHERE slack_user_id = ?`)
+    .run(email, new Date().toISOString(), slackUserId);
+}
+
 module.exports = {
   getUserBySlackId,
   isUserExcluded,
@@ -118,4 +129,5 @@ module.exports = {
   getExclusions,
   addExclusion,
   removeExclusion,
+  saveUserEmail,
 };

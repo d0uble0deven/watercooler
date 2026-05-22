@@ -30,6 +30,7 @@ const {
 
 const { createMatches }                    = require('../../matching/engine');
 const { openGroupDm, postIntroMessage }    = require('../../slack/messaging');
+const { suggestMeetingTimes }              = require('../../integrations/calendarScheduler');
 
 async function run(command, respond, client) {
 
@@ -95,6 +96,12 @@ async function run(command, respond, client) {
       saveMatchMembers(matchId, group.users.map((u) => u.id));
       savePairHistory(roundId, group.users);
       updateMatchChannel(matchId, channelId);
+
+      // ── Calendar suggestions (Phase 10 Step 5) ─────────────────────────────
+      // Posts a follow-up message with 3 suggested meeting times as Slack buttons.
+      // Runs after the DB writes so matchId is available for button encoding.
+      // All failures are caught inside suggestMeetingTimes — never blocks the round.
+      await suggestMeetingTimes(client, channelId, matchId, group.users, settings);
 
       successCount++;
       console.log(`[admin run] ✅ Matched: ${names} → channel ${channelId}`);

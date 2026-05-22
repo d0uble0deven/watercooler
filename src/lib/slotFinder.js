@@ -24,10 +24,11 @@
  * @param {number} durationMinutes       Meeting length in minutes (15 | 30 | 45 | 60)
  *
  * @param {object} [options]
- * @param {number} [options.workdayStartHour=9]      Earliest allowed start (UTC hour, 0–23)
- * @param {number} [options.workdayEndHour=17]        Latest allowed end     (UTC hour, 0–23)
- * @param {number} [options.slotIntervalMinutes=30]  Step size when scanning for slots
- * @param {number} [options.maxSlots=3]              Max suggestions to return
+ * @param {number}  [options.workdayStartHour=9]      Earliest allowed start (UTC hour, 0–23)
+ * @param {number}  [options.workdayEndHour=17]        Latest allowed end     (UTC hour, 0–23)
+ * @param {number}  [options.slotIntervalMinutes=30]  Step size when scanning for slots
+ * @param {number}  [options.maxSlots=3]              Max suggestions to return
+ * @param {boolean} [options.weekdaysOnly=true]       Skip Saturday and Sunday slots
  *
  * @returns {Array<{start: Date, end: Date}>}
  *   Candidate slots ordered earliest-first. May be empty if nothing fits.
@@ -38,6 +39,7 @@ function findSlots(busyData, windowStart, windowEnd, durationMinutes, options = 
     workdayEndHour      = 17,
     slotIntervalMinutes = 30,
     maxSlots            = 3,
+    weekdaysOnly        = true,
   } = options;
 
   // Flatten every user's busy intervals into one shared list.
@@ -58,6 +60,7 @@ function findSlots(busyData, windowStart, windowEnd, durationMinutes, options = 
     if (slotEnd > windowEnd) break;
 
     if (
+      (!weekdaysOnly || isWeekday(slotStart)) &&
       isWithinWorkday(slotStart, slotEnd, workdayStartHour, workdayEndHour) &&
       !overlapsAny(slotStart, slotEnd, allBusy)
     ) {
@@ -88,6 +91,14 @@ function isWithinWorkday(slotStart, slotEnd, workdayStartHour, workdayEndHour) {
 }
 
 /**
+ * Returns true if the date falls on a Monday–Friday (UTC day-of-week).
+ */
+function isWeekday(date) {
+  const day = date.getUTCDay(); // 0=Sun, 1=Mon … 5=Fri, 6=Sat
+  return day >= 1 && day <= 5;
+}
+
+/**
  * Returns true if [slotStart, slotEnd) overlaps ANY interval in busySlots.
  * Standard overlap test: A overlaps B iff A.start < B.end && B.start < A.end
  */
@@ -95,4 +106,4 @@ function overlapsAny(slotStart, slotEnd, busySlots) {
   return busySlots.some((b) => slotStart < b.end && b.start < slotEnd);
 }
 
-module.exports = { findSlots, isWithinWorkday, overlapsAny };
+module.exports = { findSlots, isWithinWorkday, overlapsAny, isWeekday };
