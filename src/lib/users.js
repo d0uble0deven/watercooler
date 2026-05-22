@@ -82,6 +82,13 @@ function getPausedUsers() {
     .all();
 }
 
+// Every user row regardless of active/paused status — used by refresh-names.
+function getAllUsers() {
+  return getDb()
+    .prepare('SELECT * FROM users ORDER BY display_name')
+    .all();
+}
+
 // All admin-exclusion records.
 function getExclusions() {
   return getDb()
@@ -126,6 +133,7 @@ module.exports = {
   updateUser,
   getActiveUsers,
   getPausedUsers,
+  getAllUsers,
   getExclusions,
   addExclusion,
   removeExclusion,

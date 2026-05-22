@@ -20,8 +20,8 @@ const config               = require('../config');
 const { getGraphClient }   = require('./msGraph');
 const { getFreeBusy }      = require('./calendarReader');
 const { findSlots }        = require('../lib/slotFinder');
-const { saveUserEmail }    = require('../lib/users');
-const { saveSuggestionTs } = require('../lib/rounds');
+const { saveUserEmail, updateUser } = require('../lib/users');
+const { saveSuggestionTs }          = require('../lib/rounds');
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -61,12 +61,13 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
   }
 
   // ── Free/busy query ───────────────────────────────────────────────────────
-  const { start, end } = buildSearchWindow(new Date());
-  const busyData = await getFreeBusy(graphClient, emails, start, end);
+  const tz             = settings.calendar_timezone ?? config.calendarTimezone;
+  const { start, end } = buildSearchWindow(new Date(), 5, tz);
+  const busyData       = await getFreeBusy(graphClient, emails, start, end);
 
   // ── Slot finding ──────────────────────────────────────────────────────────
   const durationMinutes = settings.meeting_duration ?? 30;
-  const slots = findSlots(busyData, start, end, durationMinutes, { maxSlots: 3 });
+  const slots = findSlots(busyData, start, end, durationMinutes, { maxSlots: 3, timezoneId: tz });
 
   if (slots.length === 0) {
     console.log(`[calendarScheduler] No shared free slots found for match ${matchId} — skipping suggestions.`);
@@ -74,7 +75,6 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
   }
 
   // ── Post interactive message ──────────────────────────────────────────────
-  const tz     = settings.calendar_timezone ?? config.calendarTimezone;
   const blocks = buildSuggestionsMessage(slots, matchId, tz, testMode);
 
   try {
@@ -116,6 +116,16 @@ async function resolveEmails(client, users) {
 
       if (email) {
         saveUserEmail(user.slack_user_id, email);  // cache for future rounds
+
+        // Also refresh display name to real name — heals username-style names
+        // (e.g. "dev.govindji" → "Dev Govindji") without requiring a re-join
+        const realName = result?.user?.profile?.real_name
+                      || result?.user?.profile?.display_name;
+        if (realName && realName !== user.display_name) {
+          updateUser(user.slack_user_id, { display_name: realName });
+          console.log(`[calendarScheduler] Updated display name for ${user.slack_user_id}: "${user.display_name}" → "${realName}"`);
+        }
+
         emails.push(email);
       } else {
         console.warn(
@@ -137,17 +147,67 @@ async function resolveEmails(client, users) {
  * Builds a search window of 5 business days starting from tomorrow.
  * Weekends are skipped so the window always spans Mon–Fri days only.
  *
- * @param  {Date} fromDate  Reference point (usually `new Date()`)
+ * Start and end are set to 9 AM and 5 PM **in the given timezone** so that
+ * slots are only offered during actual business hours (not 5 AM ET / 9 AM UTC).
+ *
+ * @param  {Date}   fromDate      Reference point (usually `new Date()`)
+ * @param  {number} businessDays  Number of business days to cover (default 5)
+ * @param  {string} timezoneId    IANA timezone (default 'UTC')
  * @returns {{ start: Date, end: Date }}
  */
-function buildSearchWindow(fromDate, businessDays = 5) {
-  const start = nextBusinessDay(fromDate);
-  start.setUTCHours(9, 0, 0, 0);
+function buildSearchWindow(fromDate, businessDays = 5, timezoneId = 'UTC') {
+  const startDay = nextBusinessDay(fromDate);
+  const start    = setLocalHour(startDay, 9, 0, timezoneId);
 
-  const end = addBusinessDays(new Date(start), businessDays);
-  end.setUTCHours(17, 0, 0, 0);
+  const endDay = addBusinessDays(new Date(startDay), businessDays);
+  const end    = setLocalHour(endDay, 17, 0, timezoneId);
 
   return { start, end };
+}
+
+// ── Timezone helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Returns the UTC Date that corresponds to `hour:minute` on the same calendar
+ * date as `date`, interpreted in `timezoneId`.
+ *
+ * Example: setLocalHour(someMonday, 9, 0, 'America/New_York')
+ *          → returns 13:00 UTC in summer (EDT = UTC-4)
+ */
+function setLocalHour(date, hour, minute, timezoneId) {
+  // Get the local calendar date (YYYY-MM-DD) in the target timezone
+  const localDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezoneId,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(date); // "2026-05-25"
+
+  // Build a naive UTC instant treating that local time as if it were UTC
+  const naiveUtc = new Date(
+    `${localDate}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00Z`
+  );
+
+  // Compute the actual TZ offset at that moment and shift accordingly
+  const offsetMs = getTimezoneOffsetMs(naiveUtc, timezoneId);
+  return new Date(naiveUtc.getTime() + offsetMs);
+}
+
+/**
+ * Returns how many milliseconds UTC is ahead of local time for `timezoneId`
+ * at the given `date`. Positive for UTC-X zones (e.g. EDT = +14 400 000 ms).
+ */
+function getTimezoneOffsetMs(date, timezoneId) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone:  timezoneId,
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+
+  const p = Object.fromEntries(
+    parts.filter((x) => x.type !== 'literal').map((x) => [x.type, parseInt(x.value, 10)])
+  );
+  const localAsUtcMs = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  return date.getTime() - localAsUtcMs;
 }
 
 function nextBusinessDay(date) {

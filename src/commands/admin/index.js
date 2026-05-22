@@ -22,6 +22,7 @@ const recentRounds = require("./recent-rounds");
 const set = require("./set");
 const { exclude, include } = require("./exclusions");
 const calendarStatus = require("./calendar-status");
+const refreshNames   = require("./refresh-names");
 
 const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin dry-run\` — preview matches without sending DMs
@@ -38,7 +39,8 @@ const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin set channel <channel-id>\`
 • \`/watercooler admin exclude @user\` — prevent user from being matched
 • \`/watercooler admin include @user\` — lift an exclusion
-• \`/watercooler admin calendar-status\` — check Microsoft Graph connection`;
+• \`/watercooler admin calendar-status\` — check Microsoft Graph connection
+• \`/watercooler admin refresh-names\` — update display names to real names from Slack profiles`;
 
 // `client` is Bolt's Web API client — only needed by commands that call Slack
 // (currently just `run`). Read-only commands don't use it.
@@ -96,6 +98,9 @@ async function handleAdmin(command, text, respond, client) {
 
       case "calendar-status":
         return await calendarStatus(command, respond);
+
+      case "refresh-names":
+        return await refreshNames(command, respond, client);
 
       default:
         return await respond(ADMIN_HELP);

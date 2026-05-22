@@ -74,9 +74,10 @@ async function autoBookMatch(client, graphClient, match, settings) {
   }
 
   // Find the next available shared slot
-  const { start, end } = buildSearchWindow(new Date());
-  const busyData = await getFreeBusy(graphClient, emails, start, end);
-  const slots    = findSlots(busyData, start, end, settings.meeting_duration ?? 30, { maxSlots: 1 });
+  const tz             = settings.calendar_timezone ?? config.calendarTimezone;
+  const { start, end } = buildSearchWindow(new Date(), 5, tz);
+  const busyData       = await getFreeBusy(graphClient, emails, start, end);
+  const slots          = findSlots(busyData, start, end, settings.meeting_duration ?? 30, { maxSlots: 1, timezoneId: tz });
 
   if (slots.length === 0) {
     console.warn(`[calendarAutoBooker] Match ${match.id}: no free slots found.`);
@@ -89,7 +90,6 @@ async function autoBookMatch(client, graphClient, match, settings) {
   saveBooking(match.id, { calendarEventId: booking.eventId, teamsLink: booking.teamsLink });
   console.log(`[calendarAutoBooker] Match ${match.id} auto-booked → event ${booking.eventId}`);
 
-  const tz = settings.calendar_timezone ?? config.calendarTimezone;
   await postOrUpdate(
     client, match,
     '⏰ Meeting auto-booked!',

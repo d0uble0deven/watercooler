@@ -36,7 +36,7 @@ function registerCommands(app) {
 
     try {
       switch (subcommand) {
-        case 'join':   return await join(command, respond);
+        case 'join':   return await join(command, respond, client);
         case 'pause':  return await pause(command, respond);
         case 'resume': return await resume(command, respond);
         case 'leave':  return await leave(command, respond);
