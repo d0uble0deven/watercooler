@@ -1,26 +1,27 @@
-'use strict';
+"use strict";
 
 // Admin command router.
 //
 // All admin commands go through here. The admin guard is checked ONCE at the
 // top — individual handlers don't need to repeat the check.
 //
+//
 // Phase 5:  dry-run
 // Phase 6:  run
 // Phase 7:  summary, participants, paused, settings, recent-rounds, set, exclude, include
 
-const { isAdmin }          = require('../../lib/adminGuard');
-const dryRun               = require('./dry-run');
-const run                  = require('./run');
-const testRun              = require('./test-run');
-const summary              = require('./summary');
-const participants         = require('./participants');
-const paused               = require('./paused');
-const showSettings         = require('./show-settings');
-const recentRounds         = require('./recent-rounds');
-const set                  = require('./set');
-const { exclude, include } = require('./exclusions');
-const calendarStatus       = require('./calendar-status');
+const { isAdmin } = require("../../lib/adminGuard");
+const dryRun = require("./dry-run");
+const run = require("./run");
+const testRun = require("./test-run");
+const summary = require("./summary");
+const participants = require("./participants");
+const paused = require("./paused");
+const showSettings = require("./show-settings");
+const recentRounds = require("./recent-rounds");
+const set = require("./set");
+const { exclude, include } = require("./exclusions");
+const calendarStatus = require("./calendar-status");
 
 const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin dry-run\` — preview matches without sending DMs
@@ -45,8 +46,8 @@ async function handleAdmin(command, text, respond, client) {
   // Admin guard — one check covers all sub-commands
   if (!isAdmin(command.user_id)) {
     await respond(
-      '⛔ This command is for Watercooler admins only.\n' +
-      'Ask an admin if you need help, or use `/watercooler join` to participate.'
+      "⛔ This command is for Watercooler admins only.\n" +
+        "Ask an admin if you need help, or use `/watercooler join` to participate.",
     );
     return;
   }
@@ -54,47 +55,46 @@ async function handleAdmin(command, text, respond, client) {
   // Split into subcommand + remaining args.
   // e.g. "set group-size 3" → subcommand="set", args="group-size 3"
   // e.g. "exclude <@U01ABC|alice>" → subcommand="exclude", args="<@U01ABC|alice>"
-  const parts = (text || '').trim().split(/\s+/);
-  const subcommand = (parts[0] || '').toLowerCase();
-  const args = parts.slice(1).join(' ');
+  const parts = (text || "").trim().split(/\s+/);
+  const subcommand = (parts[0] || "").toLowerCase();
+  const args = parts.slice(1).join(" ");
 
   try {
     switch (subcommand) {
-
-      case 'dry-run':
+      case "dry-run":
         return await dryRun(command, respond);
 
-      case 'run':
+      case "run":
         return await run(command, respond, client);
 
-      case 'test-run':
+      case "test-run":
         return await testRun(command, respond, client);
 
-      case 'summary':
+      case "summary":
         return await summary(command, respond);
 
-      case 'participants':
+      case "participants":
         return await participants(command, respond);
 
-      case 'paused':
+      case "paused":
         return await paused(command, respond);
 
-      case 'settings':
+      case "settings":
         return await showSettings(command, respond);
 
-      case 'recent-rounds':
+      case "recent-rounds":
         return await recentRounds(command, respond);
 
-      case 'set':
+      case "set":
         return await set(command, args, respond);
 
-      case 'exclude':
+      case "exclude":
         return await exclude(command, args, respond);
 
-      case 'include':
+      case "include":
         return await include(command, args, respond);
 
-      case 'calendar-status':
+      case "calendar-status":
         return await calendarStatus(command, respond);
 
       default:
@@ -102,7 +102,7 @@ async function handleAdmin(command, text, respond, client) {
     }
   } catch (err) {
     console.error(`[/watercooler admin ${subcommand}] Unhandled error:`, err);
-    await respond('⚠️ Something went wrong on our end. Check the server logs.');
+    await respond("⚠️ Something went wrong on our end. Check the server logs.");
   }
 }
 
