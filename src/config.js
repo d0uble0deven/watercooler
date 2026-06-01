@@ -33,6 +33,10 @@ const config = {
   // Must be a valid Intl timezone string (e.g. 'America/New_York', 'America/Chicago').
   // See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
   calendarTimezone:  process.env.CALENDAR_TIMEZONE  || 'America/New_York',
+
+  // Name shown in calendar invites as the person to contact for issues.
+  // If blank, the contact line is omitted from the email body.
+  contactName: process.env.CONTACT_NAME || '',
 };
 
 // True only when all three Slack secrets are present.

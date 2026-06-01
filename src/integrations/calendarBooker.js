@@ -12,6 +12,7 @@
 // participants are added as required attendees and will receive email invites
 // from Microsoft's calendar system.
 
+const config               = require('../config');
 const { formatSlotLabel }  = require('./calendarScheduler');
 const { formatNameList }   = require('../slack/messaging');
 const { toGraphDateTime }  = require('./calendarReader');
@@ -153,14 +154,28 @@ function buildAlreadyBookedMessage(teamsLink) {
 
 /**
  * Builds the HTML body for the calendar invite email that attendees receive.
+ * Appears above the Teams meeting details that Outlook appends automatically.
  */
 function buildEventBodyHtml(users) {
-  const names = formatNameList(users.map((u) => u.display_name));
+  const names       = formatNameList(users.map((u) => u.display_name));
+  const contactLine = config.contactName
+    ? `<p>Questions, suggestions, or something broken? ` +
+      `Reach out to <strong>${config.contactName}</strong> on Slack.</p>`
+    : '';
+
   return [
-    '<p>This meeting was arranged by <strong>Watercooler</strong>,',
-    ' DocMe360\'s internal social matching program.</p>',
+    '<p>Hi there! 👋</p>',
+    '<p>This meeting was set up by <strong>Watercooler</strong> — DocMe360\'s internal program ',
+    'for building connections across the team. Every few weeks, Watercooler pairs team members ',
+    'for a casual 15-minute virtual coffee, so you get to know people outside your usual Slack channels.</p>',
     `<p>You\'re meeting with: <strong>${names}</strong></p>`,
+    '<p>Your booking confirmation and the original intro message are in your Slack group DM ',
+    'with your match partner — feel free to coordinate there if you need to reschedule.</p>',
     '<p>Have a great chat! ☕</p>',
+    '<p>— The Watercooler bot</p>',
+    '<hr>',
+    contactLine,
+    '<p><em>(Microsoft Teams meeting details below)</em></p>',
   ].join('');
 }
 
