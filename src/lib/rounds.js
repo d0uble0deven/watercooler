@@ -286,6 +286,17 @@ function saveBooking(matchId, { calendarEventId, teamsLink }) {
 }
 
 /**
+ * Stores a participant's feedback response on a match row.
+ * @param {number} matchId
+ * @param {'good'|'meh'|'snoozed'} feedback
+ */
+function saveFeedback(matchId, feedback) {
+  getDb()
+    .prepare(`UPDATE matches SET feedback = ? WHERE id = ?`)
+    .run(feedback, matchId);
+}
+
+/**
  * Marks the completion message as sent on a match row so the scheduler
  * never sends it a second time.
  */
@@ -372,6 +383,7 @@ module.exports = {
   getMatchUsers,
   saveBooking,
   saveMeetingTimes,
+  saveFeedback,
   markCompletionMessageSent,
   saveSuggestionTs,
   getUnbookedMatchesPastDeadline,

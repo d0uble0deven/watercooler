@@ -84,6 +84,13 @@ async function start() {
   // directly in the browser; no server-side logic required.
   app.action('watercooler_join_teams', async ({ ack }) => { await ack(); });
 
+  // Post-meeting feedback buttons (Phase 11 Step 4)
+  const { handleMeetingGood, handleMeetingMeh, handleMeetingSnooze } =
+    require('./commands/actions/meetingFeedback');
+  app.action('watercooler_meeting_good',   handleMeetingGood);
+  app.action('watercooler_meeting_meh',    handleMeetingMeh);
+  app.action('watercooler_meeting_snooze', handleMeetingSnooze);
+
   await app.start();
   console.log('⚡️ Slack Bolt connected via Socket Mode\n');
 
