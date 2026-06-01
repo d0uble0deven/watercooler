@@ -13,6 +13,7 @@ async function showSettings(command, respond) {
   const dl             = s.booking_deadline ?? 2.5;
   const deadlineHours  = Math.floor(dl) * 24 + (dl % 1) * 8;
   const tz             = s.calendar_timezone ?? 'America/New_York';
+  const fallbackDays   = s.completion_fallback_days ?? 12;
 
   await respond([
     '*⚙️ Watercooler Settings*',
@@ -29,6 +30,7 @@ async function showSettings(command, respond) {
     `• Meeting duration:      *${s.meeting_duration ?? 30} min*`,
     `• Booking deadline:      *${dl} day(s)* _(${deadlineHours}h before intro DM)_`,
     `• Calendar timezone:     *${tz}*`,
+    `• Completion fallback:   *${fallbackDays} business day${fallbackDays === 1 ? '' : 's'}* _(post-meeting message fires after this window)_`,
     '',
     '*To update:*',
     '• `/watercooler admin set group-size <n>`',
@@ -39,6 +41,7 @@ async function showSettings(command, respond) {
     '• `/watercooler admin set meeting-duration 15|30|45|60`',
     '• `/watercooler admin set booking-deadline <days>`',
     '• `/watercooler admin set calendar-timezone <iana-tz>`',
+    '• `/watercooler admin set completion-fallback-days <n>`',
   ].join('\n'));
 }
 

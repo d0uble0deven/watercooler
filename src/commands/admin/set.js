@@ -13,6 +13,7 @@
 //   set meeting-duration <minutes>  — 15 | 30 | 45 | 60
 //   set booking-deadline <days>     — decimal days before intro DM to auto-book (e.g. 2.5)
 //   set calendar-timezone <tz>      — IANA timezone for meeting time display (e.g. America/Chicago)
+//   set completion-fallback-days <n> — business days after round before fallback completion fires (default 12)
 
 const { updateSettings } = require('../../lib/rounds');
 
@@ -30,6 +31,7 @@ const SET_HELP = [
   '• `/watercooler admin set meeting-duration <minutes>` — 15, 30, 45, or 60',
   '• `/watercooler admin set booking-deadline <days>` — days before intro to auto-book (e.g. `2.5`)',
   '• `/watercooler admin set calendar-timezone <tz>` — IANA timezone for meeting time display (e.g. `America/Chicago`)',
+  '• `/watercooler admin set completion-fallback-days <n>` — business days after round before fallback fires (default `12`)',
 ].join('\n');
 
 async function set(command, args, respond) {
@@ -47,7 +49,8 @@ async function set(command, args, respond) {
     case 'calendar-enabled':    return await setCalendarEnabled(value, respond);
     case 'meeting-duration':    return await setMeetingDuration(value, respond);
     case 'booking-deadline':    return await setBookingDeadline(value, respond);
-    case 'calendar-timezone':   return await setCalendarTimezone(value, respond);
+    case 'calendar-timezone':        return await setCalendarTimezone(value, respond);
+    case 'completion-fallback-days': return await setCompletionFallbackDays(value, respond);
     default:
       return await respond(
         `❌ Unknown setting: \`${setting || '(none)'}\`\n\n${SET_HELP}`
@@ -215,6 +218,23 @@ async function setCalendarTimezone(value, respond) {
   }
   updateSettings({ calendar_timezone: tz });
   await respond(`✅ Calendar timezone updated to *${tz}*. Meeting times will display in this timezone.`);
+}
+
+async function setCompletionFallbackDays(value, respond) {
+  const n = parseInt(value, 10);
+  if (isNaN(n) || n < 1) {
+    await respond(
+      '❌ `completion-fallback-days` must be a whole number ≥ 1.\n' +
+      'Example: `/watercooler admin set completion-fallback-days 12`\n' +
+      '_12 business days = 2.5 business weeks (e.g. Monday round → fallback fires Wednesday 2 weeks later)_'
+    );
+    return;
+  }
+  updateSettings({ completion_fallback_days: n });
+  await respond(
+    `✅ Completion fallback updated to *${n} business day${n === 1 ? '' : 's'}*.\n` +
+    '_Matches with no calendar booking will receive the post-meeting message after this many business days._'
+  );
 }
 
 module.exports = set;
