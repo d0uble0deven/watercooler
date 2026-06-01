@@ -29,6 +29,7 @@ const {
   getMatchUsers,
   getUnbookedMatchesPastDeadline,
   saveBooking,
+  saveMeetingTimes,
 } = require('../lib/rounds');
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -88,6 +89,7 @@ async function autoBookMatch(client, graphClient, match, settings) {
   // Create the calendar event
   const booking = await bookMeeting(graphClient, users, slots[0].start, slots[0].end);
   saveBooking(match.id, { calendarEventId: booking.eventId, teamsLink: booking.teamsLink });
+  saveMeetingTimes(match.id, slots[0].start, slots[0].end);
   console.log(`[calendarAutoBooker] Match ${match.id} auto-booked → event ${booking.eventId}`);
 
   await postOrUpdate(

@@ -17,7 +17,7 @@
 const config           = require('../../config');
 const { getGraphClient } = require('../../integrations/msGraph');
 const { bookMeeting, buildConfirmationMessage, buildAlreadyBookedMessage } = require('../../integrations/calendarBooker');
-const { getMatch, getMatchUsers, saveBooking, getSettings } = require('../../lib/rounds');
+const { getMatch, getMatchUsers, saveBooking, saveMeetingTimes, getSettings } = require('../../lib/rounds');
 
 /**
  * Bolt action handler — registered in app.js for action IDs matching
@@ -103,6 +103,7 @@ async function handleBookSlot({ action, ack, body, client }) {
     calendarEventId: booking.eventId,
     teamsLink:       booking.teamsLink,
   });
+  saveMeetingTimes(matchId, slotStart, slotEnd);
 
   console.log(`[bookSlot] Match ${matchId} booked → event ${booking.eventId}`);
 

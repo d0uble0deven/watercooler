@@ -285,6 +285,36 @@ function saveBooking(matchId, { calendarEventId, teamsLink }) {
     .run(calendarEventId ?? null, teamsLink ?? null, matchId);
 }
 
+/**
+ * Marks the completion message as sent on a match row so the scheduler
+ * never sends it a second time.
+ */
+function markCompletionMessageSent(matchId) {
+  getDb()
+    .prepare(`UPDATE matches SET completion_message_sent = 1 WHERE id = ?`)
+    .run(matchId);
+}
+
+/**
+ * Stores the actual meeting start and end times on a match row.
+ * Called right after saveBooking() — used later by the completion checker
+ * to know when the meeting has passed and the post-meeting message should fire.
+ *
+ * @param {number} matchId
+ * @param {Date}   start   Meeting start (UTC)
+ * @param {Date}   end     Meeting end   (UTC)
+ */
+function saveMeetingTimes(matchId, start, end) {
+  getDb()
+    .prepare(`
+      UPDATE matches
+      SET meeting_start_at = ?,
+          meeting_end_at   = ?
+      WHERE id = ?
+    `)
+    .run(start.toISOString(), end.toISOString(), matchId);
+}
+
 // ── Settings write ────────────────────────────────────────────────────────────
 
 /**
@@ -341,6 +371,8 @@ module.exports = {
   getMatch,
   getMatchUsers,
   saveBooking,
+  saveMeetingTimes,
+  markCompletionMessageSent,
   saveSuggestionTs,
   getUnbookedMatchesPastDeadline,
 };

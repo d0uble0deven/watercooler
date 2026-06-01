@@ -115,6 +115,12 @@ const MIGRATIONS = [
   `ALTER TABLE matches ADD COLUMN calendar_suggestion_ts TEXT`,
   // Phase 10 Step 8 — per-tenant timezone for calendar display
   `ALTER TABLE settings ADD COLUMN calendar_timezone  TEXT    NOT NULL DEFAULT 'America/New_York'`,
+  // Phase 11 Step 1 — post-meeting workflow
+  `ALTER TABLE matches  ADD COLUMN meeting_start_at         TEXT`,
+  `ALTER TABLE matches  ADD COLUMN meeting_end_at           TEXT`,
+  `ALTER TABLE matches  ADD COLUMN feedback                 TEXT`,
+  `ALTER TABLE matches  ADD COLUMN completion_message_sent  INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE settings ADD COLUMN completion_fallback_days INTEGER NOT NULL DEFAULT 12`,
 ];
 
 function runMigrations(db) {
@@ -142,9 +148,10 @@ function initDb() {
   if (count === 0) {
     db.prepare(`
       INSERT INTO settings (group_size, avoid_repeat_rounds, cadence, intro_day, intro_time,
-                            calendar_enabled, meeting_duration, booking_deadline, calendar_timezone)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(2, 4, 'weekly', 'monday', '09:00', 0, 30, 2.5, 'America/New_York');
+                            calendar_enabled, meeting_duration, booking_deadline, calendar_timezone,
+                            completion_fallback_days)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(2, 4, 'weekly', 'monday', '09:00', 0, 30, 2.5, 'America/New_York', 12);
     console.log('  → Default settings row created');
   }
 

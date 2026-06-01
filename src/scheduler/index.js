@@ -101,6 +101,12 @@ function startScheduler(app) {
       const { runAutoBooking } = require('../integrations/calendarAutoBooker');
       await runAutoBooking(app.client, settings);
 
+      // ── Completion check ───────────────────────────────────────────────────
+      // Runs every tick — finds matches whose meeting time has passed (or whose
+      // fallback window has elapsed) and posts the post-meeting feedback message.
+      const { runCompletionCheck } = require('../integrations/meetingCompleter');
+      await runCompletionCheck(app.client, settings);
+
       const { hour, minute } = parseTime(settings.intro_time);
       const dayNum           = parseDayToNumber(settings.intro_day);
 
