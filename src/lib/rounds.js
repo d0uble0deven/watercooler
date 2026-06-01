@@ -153,6 +153,49 @@ function completeRound(roundId) {
 }
 
 /**
+ * Returns completion stats for the most recently completed round, excluding
+ * the round that was just created (so a fresh run always shows the previous
+ * round's numbers, not its own zeroed-out data).
+ *
+ * "Met" = total matches minus those who clicked Snooze. Matches with no
+ * feedback response (user ignored the buttons) are counted as met — same
+ * assumption Donut uses.
+ *
+ * Returns null when there is no eligible previous round.
+ *
+ * @param {number} excludeRoundId  The current round ID to exclude
+ * @returns {{ roundId, total, met, snoozed, pct } | null}
+ */
+function getLastRoundStats(excludeRoundId) {
+  const db = getDb();
+
+  const round = db.prepare(`
+    SELECT id FROM rounds
+    WHERE  status = 'completed'
+      AND  id != ?
+    ORDER  BY id DESC
+    LIMIT  1
+  `).get(excludeRoundId ?? 0);
+
+  if (!round) return null;
+
+  const row = db.prepare(`
+    SELECT
+      COUNT(*)                                              AS total,
+      SUM(CASE WHEN feedback = 'snoozed' THEN 1 ELSE 0 END) AS snoozed
+    FROM matches
+    WHERE round_id = ?
+  `).get(round.id);
+
+  if (!row || row.total === 0) return null;
+
+  const met = row.total - (row.snoozed ?? 0);
+  const pct = Math.round((met / row.total) * 100);
+
+  return { roundId: round.id, total: row.total, met, snoozed: row.snoozed ?? 0, pct };
+}
+
+/**
  * Saves the Slack DM channel ID back onto a match row (after the DM is created).
  */
 function updateMatchChannel(matchId, slackDmChannelId) {
@@ -375,6 +418,7 @@ module.exports = {
   savePairHistory,
   completeRound,
   updateMatchChannel,
+  getLastRoundStats,
   getRecentRounds,
   getParticipantCounts,
   updateSettings,

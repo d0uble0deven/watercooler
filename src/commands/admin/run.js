@@ -26,6 +26,7 @@ const {
   savePairHistory,
   completeRound,
   updateMatchChannel,
+  getLastRoundStats,
 } = require('../../lib/rounds');
 
 const { createMatches }                    = require('../../matching/engine');
@@ -122,13 +123,28 @@ async function run(command, respond, client, options = {}) {
   // ── 7. Optional channel announcement ──────────────────────────────────────
   // If an intro channel is configured, post a summary there so the whole
   // workspace can see that a Watercooler round just happened.
+  // For real runs, also prepend stats from the previous round if available.
   if (settings.intro_channel_id && client && successCount > 0) {
     try {
+      // Build previous-round stats line (real runs only — skip for test runs)
+      let statsLine = '';
+      if (!testMode) {
+        try {
+          const stats = getLastRoundStats(roundId);
+          if (stats) {
+            const groupWord = stats.total === 1 ? 'group' : 'groups';
+            statsLine =
+              `📊 *Last round:* ${stats.met} out of ${stats.total} ${groupWord} met` +
+              ` — that's ${stats.pct}%! ☕\n\n`;
+          }
+        } catch (_) { /* non-fatal — stats are best-effort */ }
+      }
+
       const channelText = testMode
         ? `🧪 *[Test run]* 🎉 *Watercooler round #${roundId} is live!* ` +
           `*${successCount} group(s)* have been matched. ` +
           `Participants have been asked to try the full booking flow — no real meetings required!`
-        : `🎉 *Watercooler round #${roundId} is live!* ` +
+        : `${statsLine}🎉 *Watercooler round #${roundId} is live!* ` +
           `*${successCount} group(s)* have been matched — check your DMs for your intro. ☕`;
 
       await client.chat.postMessage({
