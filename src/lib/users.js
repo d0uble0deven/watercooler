@@ -126,6 +126,14 @@ function saveUserEmail(slackUserId, email) {
     .run(email, new Date().toISOString(), slackUserId);
 }
 
+// Caches the user's M365 mailbox timezone as an IANA string (e.g. 'America/Chicago').
+// Fetched from Graph /mailboxSettings on first calendar run, avoids re-fetching.
+function saveUserTimezone(slackUserId, ianaTimezone) {
+  getDb()
+    .prepare(`UPDATE users SET ms_timezone = ?, updated_at = ? WHERE slack_user_id = ?`)
+    .run(ianaTimezone, new Date().toISOString(), slackUserId);
+}
+
 module.exports = {
   getUserBySlackId,
   isUserExcluded,
@@ -138,4 +146,5 @@ module.exports = {
   addExclusion,
   removeExclusion,
   saveUserEmail,
+  saveUserTimezone,
 };

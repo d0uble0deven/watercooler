@@ -156,13 +156,21 @@ function overlapsAny(slotStart, slotEnd, busySlots) {
 function findSlotsWithPrimePreference(
   busyData, windowStart, windowEnd, durationMinutes,
   maxCount, timezoneId = 'UTC', minGapMinutes = 0,
+  {
+    primeStartHour   = 11,
+    primeEndHour     = 15,
+    workdayStartHour = 9,
+    workdayEndHour   = 17,
+  } = {},
 ) {
-  // Gather every available slot in the full 9–17 business-hours window
+  // Gather every available slot in the workday window.
+  // When an intersection is provided the caller passes UTC-based hours and
+  // timezoneId = 'UTC'; the defaults reproduce the original 9–17 local behaviour.
   const allAvailable = findSlots(busyData, windowStart, windowEnd, durationMinutes, {
-    workdayStartHour:    9,
-    workdayEndHour:      17,
-    maxSlots:            200,   // high cap — we'll filter below
-    weekdaysOnly:        true,
+    workdayStartHour,
+    workdayEndHour,
+    maxSlots:     200,   // high cap — we'll filter below
+    weekdaysOnly: true,
     timezoneId,
   });
 
@@ -170,11 +178,12 @@ function findSlotsWithPrimePreference(
 
   const gapMs = minGapMinutes * 60 * 1000;
 
-  // A slot is "prime" if its entire duration fits within 11 AM–3 PM local time
+  // A slot is "prime" if its entire duration fits within the prime window.
+  // When using intersection hours timezoneId is 'UTC' so the check runs in UTC.
   function isPrime(slot) {
     const startH = getLocalDecimalHour(slot.start, timezoneId);
     const endH   = getLocalDecimalHour(slot.end,   timezoneId);
-    return startH >= 11 && endH <= 15;
+    return startH >= primeStartHour && endH <= primeEndHour;
   }
 
   // Greedy pick — walks the given list in order, enforcing the gap

@@ -121,6 +121,8 @@ const MIGRATIONS = [
   `ALTER TABLE matches  ADD COLUMN feedback                 TEXT`,
   `ALTER TABLE matches  ADD COLUMN completion_message_sent  INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE settings ADD COLUMN completion_fallback_days INTEGER NOT NULL DEFAULT 12`,
+  // Feature C — per-user M365 timezone (IANA string, e.g. 'America/Chicago')
+  `ALTER TABLE users    ADD COLUMN ms_timezone              TEXT`,
 ];
 
 function runMigrations(db) {

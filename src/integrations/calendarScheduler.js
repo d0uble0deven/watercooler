@@ -20,7 +20,7 @@ const config               = require('../config');
 const { getGraphClient }   = require('./msGraph');
 const { getFreeBusy }      = require('./calendarReader');
 const { findSlots, findSlotsWithPrimePreference } = require('../lib/slotFinder');
-const { saveUserEmail, updateUser } = require('../lib/users');
+const { saveUserEmail, saveUserTimezone, updateUser } = require('../lib/users');
 const { saveSuggestionTs }          = require('../lib/rounds');
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -60,26 +60,48 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
     return;
   }
 
+  // ── Resolve per-user timezones + compute shared-hours intersection ────────
+  // participantTzs: IANA strings for each user whose M365 timezone we know.
+  // intersection:   UTC hour bounds covering the hours all participants share.
+  // Falls back to orgTz (null intersection) when timezones can't be resolved.
+  const orgTz          = settings.calendar_timezone ?? config.calendarTimezone;
+  const participantTzs = await resolveTimezones(graphClient, users);
+  const intersection   = computeIntersection(participantTzs, new Date());
+
+  if (intersection) {
+    const tzList = participantTzs.join(', ');
+    console.log(`[calendarScheduler] Timezone intersection for match ${matchId} (${tzList}):`,
+      `workday ${intersection.workdayStartHour}–${intersection.workdayEndHour} UTC, ` +
+      `prime ${intersection.primeStartHour}–${intersection.primeEndHour} UTC`);
+  } else {
+    console.log(`[calendarScheduler] No timezone intersection — using org timezone (${orgTz}).`);
+  }
+
   // ── Build near and far search windows ────────────────────────────────────
   // Near: +2 to +4 business days (e.g. Mon match → Wed–Fri same week)
   // Far:  +5 to +9 business days (e.g. Mon match → following Mon–Fri)
-  const tz   = settings.calendar_timezone ?? config.calendarTimezone;
-  const near = buildNearWindow(new Date(), tz);
-  const far  = buildFarWindow(new Date(), tz);
+  // When an intersection is available the windows start/end at the shared UTC
+  // hours rather than 9 AM / 5 PM in the org timezone.
+  const near = buildNearWindow(new Date(), orgTz, intersection);
+  const far  = buildFarWindow(new Date(), orgTz, intersection);
 
   // ── Free/busy query (single call covers both windows) ────────────────────
   const busyData = await getFreeBusy(graphClient, emails, near.start, far.end);
 
   // ── Slot finding ──────────────────────────────────────────────────────────
-  // 2 slots from the near window  — prime time (11–3) preferred, ≥ 2 h apart
+  // 2 slots from the near window  — prime time preferred, ≥ 2 h apart
   // 1 slot  from the far window   — prime time preferred, no gap constraint
+  // With an intersection: checks run in UTC using computed UTC hour bounds.
+  // Without one: checks run in orgTz with standard 9–17 / 11–15 defaults.
   const durationMinutes = settings.meeting_duration ?? 30;
+  const slotTz          = intersection?.timezoneId ?? orgTz;
+  const slotOptions     = intersection ?? {};
 
   const nearSlots = findSlotsWithPrimePreference(
-    busyData, near.start, near.end, durationMinutes, 2, tz, 120,
+    busyData, near.start, near.end, durationMinutes, 2, slotTz, 120, slotOptions,
   );
   const farSlots = findSlotsWithPrimePreference(
-    busyData, far.start,  far.end,  durationMinutes, 1, tz,   0,
+    busyData, far.start,  far.end,  durationMinutes, 1, slotTz,   0, slotOptions,
   );
 
   const slots = [...nearSlots, ...farSlots];
@@ -90,7 +112,10 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
   }
 
   // ── Post interactive message ──────────────────────────────────────────────
-  const blocks = buildSuggestionsMessage(slots, matchId, tz, testMode);
+  // Display times in the shared local timezone when everyone is co-located
+  // (e.g. two Chicago users see CDT, not EDT). Mixed timezones fall back to orgTz.
+  const displayTz = pickDisplayTimezone(participantTzs, orgTz);
+  const blocks = buildSuggestionsMessage(slots, matchId, displayTz, testMode);
 
   try {
     const result = await client.chat.postMessage({
@@ -154,6 +179,160 @@ async function resolveEmails(client, users) {
   }
 
   return emails;
+}
+
+// ── Windows → IANA timezone mapping ──────────────────────────────────────────
+// M365 mailboxSettings returns Windows timezone names (e.g. "Central Standard Time").
+// Node's Intl requires IANA names, so we translate here.
+// Windows uses the same name year-round regardless of DST — that's fine because
+// Intl.DateTimeFormat + IANA handles the actual DST transitions for us.
+// Reference: https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/default-time-zones
+
+const WINDOWS_TO_IANA = {
+  // ── United States ──────────────────────────────────────────────────────────
+  'Eastern Standard Time':         'America/New_York',
+  'Central Standard Time':         'America/Chicago',
+  'Mountain Standard Time':        'America/Denver',
+  'US Mountain Standard Time':     'America/Phoenix',    // Arizona — no DST
+  'Pacific Standard Time':         'America/Los_Angeles',
+  'Alaska Standard Time':          'America/Anchorage',
+  'Hawaii-Aleutian Standard Time': 'Pacific/Honolulu',
+  'Atlantic Standard Time':        'America/Halifax',
+  // ── Common international ───────────────────────────────────────────────────
+  'UTC':                           'UTC',
+  'GMT Standard Time':             'Europe/London',
+  'W. Europe Standard Time':       'Europe/Berlin',
+  'Central Europe Standard Time':  'Europe/Budapest',
+  'Romance Standard Time':         'Europe/Paris',
+  'India Standard Time':           'Asia/Kolkata',
+};
+
+// ── Timezone resolution ───────────────────────────────────────────────────────
+
+/**
+ * Returns an IANA timezone string for each user, reading the cached `ms_timezone`
+ * DB column when available or fetching from Graph `/mailboxSettings` on first run.
+ *
+ * A missing or unrecognised timezone is silently skipped — the caller falls
+ * back to the org-wide timezone for that user.
+ *
+ * @param {object}   graphClient  MS Graph client
+ * @param {object[]} users        DB user rows (.slack_user_id, .slack_email, .ms_timezone)
+ * @returns {Promise<string[]>}   IANA timezone strings (only successfully resolved entries)
+ */
+async function resolveTimezones(graphClient, users) {
+  const timezones = [];
+
+  for (const user of users) {
+    // Already cached — use it directly without a Graph call
+    if (user.ms_timezone) {
+      timezones.push(user.ms_timezone);
+      continue;
+    }
+
+    // Need an email address to query Graph
+    if (!user.slack_email) {
+      console.warn(`[calendarScheduler] No email for ${user.slack_user_id} — cannot fetch timezone.`);
+      continue;
+    }
+
+    try {
+      const settings  = await graphClient
+        .api(`/users/${encodeURIComponent(user.slack_email)}/mailboxSettings`)
+        .get();
+
+      const windowsTz = settings?.timeZone;
+      const ianaTz    = windowsTz ? (WINDOWS_TO_IANA[windowsTz] ?? null) : null;
+
+      if (ianaTz) {
+        saveUserTimezone(user.slack_user_id, ianaTz);
+        timezones.push(ianaTz);
+        console.log(
+          `[calendarScheduler] Cached timezone for ${user.slack_user_id}: ` +
+          `"${windowsTz}" → "${ianaTz}"`
+        );
+      } else {
+        console.warn(
+          `[calendarScheduler] Unknown M365 timezone "${windowsTz}" for ${user.slack_user_id} — ` +
+          'falling back to org timezone for this user.'
+        );
+      }
+    } catch (err) {
+      console.warn(
+        `[calendarScheduler] mailboxSettings fetch failed for ${user.slack_user_id}:`, err.message
+      );
+    }
+  }
+
+  return timezones;
+}
+
+// ── Timezone intersection ─────────────────────────────────────────────────────
+
+/**
+ * Given an array of IANA timezone strings, returns the UTC hour bounds that
+ * represent the shared business hours and prime hours across all participants.
+ *
+ * Example — one person in ET, one in CT (summer):
+ *   workdayStartHour = 14  (10 AM ET = 9 AM CT in UTC)
+ *   workdayEndHour   = 21  ( 5 PM ET = 4 PM CT in UTC)
+ *   primeStartHour   = 16  (12 PM ET = 11 AM CT in UTC)
+ *   primeEndHour     = 19  ( 3 PM ET = 2 PM CT in UTC)
+ *
+ * The returned object is meant to be spread into findSlotsWithPrimePreference's
+ * options argument together with timezoneId: 'UTC'.
+ *
+ * Returns null when:
+ *   - the array is empty (caller falls back to org timezone)
+ *   - no working-hours overlap exists (should never happen for US zones)
+ *
+ * @param  {string[]} timezones     IANA timezone IDs (e.g. ['America/New_York', 'America/Chicago'])
+ * @param  {Date}     referenceDate A date within the target week (used to resolve DST offsets)
+ * @returns {{ workdayStartHour, workdayEndHour, primeStartHour, primeEndHour, timezoneId } | null}
+ */
+function computeIntersection(timezones, referenceDate) {
+  if (!timezones || timezones.length === 0) return null;
+
+  // Convert a local hour to a normalized UTC decimal hour on the reference date.
+  // We measure ms elapsed since the start of the reference day in UTC, then convert
+  // to hours. This handles wrap-around correctly: western timezones where e.g.
+  // 5 PM PDT is 00:00 UTC the next day get a normalized value of 24 (not 0),
+  // so comparisons like max/min remain meaningful.
+  const refDayStartMs = Date.UTC(
+    referenceDate.getUTCFullYear(),
+    referenceDate.getUTCMonth(),
+    referenceDate.getUTCDate(),
+  );
+
+  function toUtcHour(localHour, tz) {
+    const utcDate = setLocalHour(referenceDate, localHour, 0, tz);
+    return (utcDate.getTime() - refDayStartMs) / 3600000;
+  }
+
+  const workdayStarts = timezones.map((tz) => toUtcHour(9,  tz));
+  const workdayEnds   = timezones.map((tz) => toUtcHour(17, tz));
+  const primeStarts   = timezones.map((tz) => toUtcHour(11, tz));
+  const primeEnds     = timezones.map((tz) => toUtcHour(15, tz));
+
+  const workdayStartHour = Math.max(...workdayStarts);
+  const workdayEndHour   = Math.min(...workdayEnds);
+
+  if (workdayStartHour >= workdayEndHour) {
+    console.warn('[calendarScheduler] No working-hours overlap — falling back to org timezone.');
+    return null;
+  }
+
+  const primeStartHour = Math.max(...primeStarts);
+  const primeEndHour   = Math.min(...primeEnds);
+
+  return {
+    workdayStartHour,
+    workdayEndHour,
+    // If prime windows don't overlap, widen prime to the full shared workday
+    primeStartHour: primeStartHour < primeEndHour ? primeStartHour : workdayStartHour,
+    primeEndHour:   primeStartHour < primeEndHour ? primeEndHour   : workdayEndHour,
+    timezoneId:     'UTC',  // all hours are UTC; slot checks must run in UTC
+  };
 }
 
 // ── Search window ─────────────────────────────────────────────────────────────
@@ -226,17 +405,37 @@ function getTimezoneOffsetMs(date, timezoneId) {
 }
 
 /**
+ * Returns a new Date with the UTC hour set to `hour` on the same UTC calendar
+ * date as `date`. Used when intersection hours are already in UTC.
+ * US timezone offsets are always whole hours, so `hour` is always an integer.
+ */
+function setUtcHour(date, hour) {
+  const d = new Date(date);
+  d.setUTCHours(hour, 0, 0, 0);
+  return d;
+}
+
+/**
  * Near window: from +2 to +4 business days from `fromDate`.
  * For a Monday match this is Wednesday–Friday of the same week.
- * Start time: 9 AM local; end time: 5 PM local.
  *
- * @param  {Date}   fromDate    Reference point (usually `new Date()`)
- * @param  {string} timezoneId  IANA timezone
+ * Without intersection: start = 9 AM local, end = 5 PM local (org timezone).
+ * With intersection:    start/end use the shared UTC hours from computeIntersection.
+ *
+ * @param  {Date}        fromDate      Reference point (usually `new Date()`)
+ * @param  {string}      timezoneId    IANA org timezone (fallback when no intersection)
+ * @param  {object|null} intersection  Output of computeIntersection(), or null
  * @returns {{ start: Date, end: Date }}
  */
-function buildNearWindow(fromDate, timezoneId = 'UTC') {
+function buildNearWindow(fromDate, timezoneId = 'UTC', intersection = null) {
   const startDay = addBusinessDays(new Date(fromDate), 2);
   const endDay   = addBusinessDays(new Date(fromDate), 4);
+  if (intersection) {
+    return {
+      start: setUtcHour(startDay, intersection.workdayStartHour),
+      end:   setUtcHour(endDay,   intersection.workdayEndHour),
+    };
+  }
   return {
     start: setLocalHour(startDay, 9,  0, timezoneId),
     end:   setLocalHour(endDay,   17, 0, timezoneId),
@@ -246,15 +445,24 @@ function buildNearWindow(fromDate, timezoneId = 'UTC') {
 /**
  * Far window: from +5 to +9 business days from `fromDate`.
  * For a Monday match this is the following Monday–Friday.
- * Start time: 9 AM local; end time: 5 PM local.
  *
- * @param  {Date}   fromDate    Reference point (usually `new Date()`)
- * @param  {string} timezoneId  IANA timezone
+ * Without intersection: start = 9 AM local, end = 5 PM local (org timezone).
+ * With intersection:    start/end use the shared UTC hours from computeIntersection.
+ *
+ * @param  {Date}        fromDate      Reference point (usually `new Date()`)
+ * @param  {string}      timezoneId    IANA org timezone (fallback when no intersection)
+ * @param  {object|null} intersection  Output of computeIntersection(), or null
  * @returns {{ start: Date, end: Date }}
  */
-function buildFarWindow(fromDate, timezoneId = 'UTC') {
+function buildFarWindow(fromDate, timezoneId = 'UTC', intersection = null) {
   const startDay = addBusinessDays(new Date(fromDate), 5);
   const endDay   = addBusinessDays(new Date(fromDate), 9);
+  if (intersection) {
+    return {
+      start: setUtcHour(startDay, intersection.workdayStartHour),
+      end:   setUtcHour(endDay,   intersection.workdayEndHour),
+    };
+  }
   return {
     start: setLocalHour(startDay, 9,  0, timezoneId),
     end:   setLocalHour(endDay,   17, 0, timezoneId),
@@ -378,6 +586,27 @@ function getTzAbbr(date, timezoneId) {
     .find((p) => p.type === 'timeZoneName')?.value ?? timezoneId;
 }
 
+// ── Display timezone helper ───────────────────────────────────────────────────
+
+/**
+ * Picks the best timezone to display Slack button labels in.
+ *
+ * When every participant shares the same timezone (e.g. two Chicago users),
+ * their local timezone is used so the times feel natural ("11:00 AM CDT" not
+ * "12:00 PM EDT"). When participants span multiple zones, falls back to the
+ * org-wide timezone.
+ *
+ * @param {string[]} timezones  Resolved IANA timezone strings for participants
+ * @param {string}   orgTz      Org-wide fallback timezone
+ * @returns {string}
+ */
+function pickDisplayTimezone(timezones, orgTz) {
+  if (timezones.length > 0 && timezones.every((tz) => tz === timezones[0])) {
+    return timezones[0];
+  }
+  return orgTz;
+}
+
 module.exports = {
   suggestMeetingTimes,
   buildSearchWindow,
@@ -388,4 +617,8 @@ module.exports = {
   // Exported for testing
   nextBusinessDay,
   addBusinessDays,
+  resolveTimezones,
+  computeIntersection,
+  pickDisplayTimezone,
+  WINDOWS_TO_IANA,
 };
