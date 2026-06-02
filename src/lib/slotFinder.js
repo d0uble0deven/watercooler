@@ -127,4 +127,87 @@ function overlapsAny(slotStart, slotEnd, busySlots) {
   return busySlots.some((b) => slotStart < b.end && b.start < slotEnd);
 }
 
-module.exports = { findSlots, isWithinWorkday, overlapsAny, isWeekday, getLocalDecimalHour };
+// ── Prime-time preferred slot finder ─────────────────────────────────────────
+
+/**
+ * Finds up to `maxCount` available slots, preferring those whose start time
+ * falls in the "prime" window (11 AM–3 PM local time) before falling back to
+ * the full 9 AM–5 PM business-hours window.
+ *
+ * A minimum gap (in minutes) between the START times of chosen slots is
+ * enforced so suggestions aren't clustered back-to-back.
+ *
+ * Algorithm:
+ *   Pass 1 — sort prime slots to the front, then run a greedy pick with the
+ *             gap constraint. If this fills `maxCount`, we're done.
+ *   Pass 2 — if Pass 1 fell short (prime slots too sparse to satisfy the gap),
+ *             retry with strict chronological order, which maximises the number
+ *             of slots returned even if some are outside prime time.
+ *
+ * @param {Array}  busyData        Output from calendarReader.getFreeBusy()
+ * @param {Date}   windowStart     Start of search window
+ * @param {Date}   windowEnd       End of search window
+ * @param {number} durationMinutes Meeting length in minutes
+ * @param {number} maxCount        How many slots to return
+ * @param {string} timezoneId      IANA timezone for prime-time classification
+ * @param {number} minGapMinutes   Minimum gap between slot start times (default 0)
+ * @returns {Array<{start: Date, end: Date}>}  Chronologically ordered
+ */
+function findSlotsWithPrimePreference(
+  busyData, windowStart, windowEnd, durationMinutes,
+  maxCount, timezoneId = 'UTC', minGapMinutes = 0,
+) {
+  // Gather every available slot in the full 9–17 business-hours window
+  const allAvailable = findSlots(busyData, windowStart, windowEnd, durationMinutes, {
+    workdayStartHour:    9,
+    workdayEndHour:      17,
+    maxSlots:            200,   // high cap — we'll filter below
+    weekdaysOnly:        true,
+    timezoneId,
+  });
+
+  if (allAvailable.length === 0) return [];
+
+  const gapMs = minGapMinutes * 60 * 1000;
+
+  // A slot is "prime" if its entire duration fits within 11 AM–3 PM local time
+  function isPrime(slot) {
+    const startH = getLocalDecimalHour(slot.start, timezoneId);
+    const endH   = getLocalDecimalHour(slot.end,   timezoneId);
+    return startH >= 11 && endH <= 15;
+  }
+
+  // Greedy pick — walks the given list in order, enforcing the gap
+  function greedyPick(slots) {
+    const picks  = [];
+    let minNext  = null;
+    for (const slot of slots) {
+      if (picks.length >= maxCount) break;
+      if (minNext && slot.start < minNext) continue;
+      picks.push(slot);
+      if (gapMs > 0) minNext = new Date(slot.start.getTime() + gapMs);
+    }
+    // Always return in chronological order for display
+    return picks.sort((a, b) => a.start - b.start);
+  }
+
+  // Pass 1: prime slots first, then the rest (time-ordered within each group)
+  const primePriority = [
+    ...allAvailable.filter(isPrime),
+    ...allAvailable.filter((s) => !isPrime(s)),
+  ];
+  const primePicks = greedyPick(primePriority);
+  if (primePicks.length >= maxCount) return primePicks;
+
+  // Pass 2: pure chronological — always finds the maximum possible slots
+  return greedyPick(allAvailable);
+}
+
+module.exports = {
+  findSlots,
+  findSlotsWithPrimePreference,
+  isWithinWorkday,
+  overlapsAny,
+  isWeekday,
+  getLocalDecimalHour,
+};

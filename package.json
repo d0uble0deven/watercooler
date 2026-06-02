@@ -27,7 +27,8 @@
     "test:post4": "node --disable-warning=ExperimentalWarning scripts/test-post-meeting-step4.js",
     "test:post5": "node --disable-warning=ExperimentalWarning scripts/test-post-meeting-step5.js",
     "test:post6": "node --disable-warning=ExperimentalWarning scripts/test-post-meeting-step6.js",
-    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:calendar && npm run test:calendar-settings && npm run test:calendar-reader && npm run test:slot-finder && npm run test:step5 && npm run test:step6 && npm run test:step7 && npm run test:step8 && npm run test:post1"
+    "test:slot-dist": "node --disable-warning=ExperimentalWarning scripts/test-slot-distribution.js",
+    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:calendar && npm run test:calendar-settings && npm run test:calendar-reader && npm run test:slot-finder && npm run test:step5 && npm run test:step6 && npm run test:step7 && npm run test:step8 && npm run test:post1 && npm run test:slot-dist"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",

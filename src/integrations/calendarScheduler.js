@@ -19,7 +19,7 @@
 const config               = require('../config');
 const { getGraphClient }   = require('./msGraph');
 const { getFreeBusy }      = require('./calendarReader');
-const { findSlots }        = require('../lib/slotFinder');
+const { findSlots, findSlotsWithPrimePreference } = require('../lib/slotFinder');
 const { saveUserEmail, updateUser } = require('../lib/users');
 const { saveSuggestionTs }          = require('../lib/rounds');
 
@@ -60,14 +60,29 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
     return;
   }
 
-  // ── Free/busy query ───────────────────────────────────────────────────────
-  const tz             = settings.calendar_timezone ?? config.calendarTimezone;
-  const { start, end } = buildSearchWindow(new Date(), 5, tz);
-  const busyData       = await getFreeBusy(graphClient, emails, start, end);
+  // ── Build near and far search windows ────────────────────────────────────
+  // Near: +2 to +4 business days (e.g. Mon match → Wed–Fri same week)
+  // Far:  +5 to +9 business days (e.g. Mon match → following Mon–Fri)
+  const tz   = settings.calendar_timezone ?? config.calendarTimezone;
+  const near = buildNearWindow(new Date(), tz);
+  const far  = buildFarWindow(new Date(), tz);
+
+  // ── Free/busy query (single call covers both windows) ────────────────────
+  const busyData = await getFreeBusy(graphClient, emails, near.start, far.end);
 
   // ── Slot finding ──────────────────────────────────────────────────────────
+  // 2 slots from the near window  — prime time (11–3) preferred, ≥ 2 h apart
+  // 1 slot  from the far window   — prime time preferred, no gap constraint
   const durationMinutes = settings.meeting_duration ?? 30;
-  const slots = findSlots(busyData, start, end, durationMinutes, { maxSlots: 3, timezoneId: tz });
+
+  const nearSlots = findSlotsWithPrimePreference(
+    busyData, near.start, near.end, durationMinutes, 2, tz, 120,
+  );
+  const farSlots = findSlotsWithPrimePreference(
+    busyData, far.start,  far.end,  durationMinutes, 1, tz,   0,
+  );
+
+  const slots = [...nearSlots, ...farSlots];
 
   if (slots.length === 0) {
     console.log(`[calendarScheduler] No shared free slots found for match ${matchId} — skipping suggestions.`);
@@ -210,6 +225,42 @@ function getTimezoneOffsetMs(date, timezoneId) {
   return date.getTime() - localAsUtcMs;
 }
 
+/**
+ * Near window: from +2 to +4 business days from `fromDate`.
+ * For a Monday match this is Wednesday–Friday of the same week.
+ * Start time: 9 AM local; end time: 5 PM local.
+ *
+ * @param  {Date}   fromDate    Reference point (usually `new Date()`)
+ * @param  {string} timezoneId  IANA timezone
+ * @returns {{ start: Date, end: Date }}
+ */
+function buildNearWindow(fromDate, timezoneId = 'UTC') {
+  const startDay = addBusinessDays(new Date(fromDate), 2);
+  const endDay   = addBusinessDays(new Date(fromDate), 4);
+  return {
+    start: setLocalHour(startDay, 9,  0, timezoneId),
+    end:   setLocalHour(endDay,   17, 0, timezoneId),
+  };
+}
+
+/**
+ * Far window: from +5 to +9 business days from `fromDate`.
+ * For a Monday match this is the following Monday–Friday.
+ * Start time: 9 AM local; end time: 5 PM local.
+ *
+ * @param  {Date}   fromDate    Reference point (usually `new Date()`)
+ * @param  {string} timezoneId  IANA timezone
+ * @returns {{ start: Date, end: Date }}
+ */
+function buildFarWindow(fromDate, timezoneId = 'UTC') {
+  const startDay = addBusinessDays(new Date(fromDate), 5);
+  const endDay   = addBusinessDays(new Date(fromDate), 9);
+  return {
+    start: setLocalHour(startDay, 9,  0, timezoneId),
+    end:   setLocalHour(endDay,   17, 0, timezoneId),
+  };
+}
+
 function nextBusinessDay(date) {
   const d = new Date(date);
   d.setUTCDate(d.getUTCDate() + 1);
@@ -330,6 +381,8 @@ function getTzAbbr(date, timezoneId) {
 module.exports = {
   suggestMeetingTimes,
   buildSearchWindow,
+  buildNearWindow,
+  buildFarWindow,
   buildSuggestionsMessage,
   formatSlotLabel,
   // Exported for testing
