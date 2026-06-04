@@ -123,6 +123,8 @@ const MIGRATIONS = [
   `ALTER TABLE settings ADD COLUMN completion_fallback_days INTEGER NOT NULL DEFAULT 12`,
   // Feature C — per-user M365 timezone (IANA string, e.g. 'America/Chicago')
   `ALTER TABLE users    ADD COLUMN ms_timezone              TEXT`,
+  // Admin commands — round summary posted to channel once all completions are sent
+  `ALTER TABLE rounds   ADD COLUMN summary_sent             INTEGER NOT NULL DEFAULT 0`,
 ];
 
 function runMigrations(db) {

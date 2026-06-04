@@ -24,7 +24,8 @@ const { exclude, include } = require("./exclusions");
 const calendarStatus = require("./calendar-status");
 const refreshNames   = require("./refresh-names");
 const { listMatches } = require("./list-matches");
-const { forceBook }   = require("./force-book");
+const { forceBook }      = require("./force-book");
+const { sendCompletion } = require("./send-completion");
 
 const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin dry-run\` — preview matches without sending DMs
@@ -114,6 +115,9 @@ async function handleAdmin(command, text, respond, client) {
 
       case "force-book":
         return await forceBook(command, args, respond, client);
+
+      case "send-completion":
+        return await sendCompletion(command, args, respond, client);
 
       default:
         return await respond(ADMIN_HELP);

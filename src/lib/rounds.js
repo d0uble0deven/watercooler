@@ -289,6 +289,53 @@ function saveSuggestionTs(matchId, ts) {
 }
 
 /**
+ * Returns all matches with completion_message_sent = 0 from completed rounds,
+ * with no time filter. Used by the `send-completion` admin command to bypass
+ * the normal meeting-time / fallback-days gate.
+ */
+function getAllMatchesPendingCompletion() {
+  return getDb().prepare(`
+    SELECT m.*
+    FROM   matches m
+    JOIN   rounds r ON r.id = m.round_id
+    WHERE  m.completion_message_sent = 0
+      AND  m.slack_dm_channel_id    IS NOT NULL
+      AND  r.status = 'completed'
+    ORDER  BY m.id ASC
+  `).all();
+}
+
+/**
+ * Returns true when every match in the given round has completion_message_sent = 1.
+ * Used to decide whether to post the round-summary to the intro channel.
+ */
+function isRoundFullyComplete(roundId) {
+  const row = getDb().prepare(`
+    SELECT COUNT(*) AS total, SUM(completion_message_sent) AS sent
+    FROM   matches WHERE round_id = ?
+  `).get(roundId);
+  return row && row.total > 0 && row.sent >= row.total;
+}
+
+/**
+ * Marks the round's channel summary as sent so it is never posted twice.
+ */
+function markRoundSummarySent(roundId) {
+  getDb()
+    .prepare(`UPDATE rounds SET summary_sent = 1 WHERE id = ?`)
+    .run(roundId);
+}
+
+/**
+ * Returns the number of matches in a round. Used for the channel summary message.
+ */
+function getRoundMatchCount(roundId) {
+  return getDb()
+    .prepare(`SELECT COUNT(*) AS n FROM matches WHERE round_id = ?`)
+    .get(roundId).n;
+}
+
+/**
  * Returns every unbooked match from a completed round, regardless of age.
  * Used by the `force-book` admin command to bypass the deadline filter.
  */
@@ -489,5 +536,9 @@ module.exports = {
   saveSuggestionTs,
   getUnbookedMatchesPastDeadline,
   getAllUnbookedMatches,
+  getAllMatchesPendingCompletion,
+  isRoundFullyComplete,
+  markRoundSummarySent,
+  getRoundMatchCount,
   getRecentMatchesForAdmin,
 };
