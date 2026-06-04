@@ -289,6 +289,22 @@ function saveSuggestionTs(matchId, ts) {
 }
 
 /**
+ * Returns every unbooked match from a completed round, regardless of age.
+ * Used by the `force-book` admin command to bypass the deadline filter.
+ */
+function getAllUnbookedMatches() {
+  return getDb().prepare(`
+    SELECT m.*
+    FROM   matches m
+    JOIN   rounds r ON r.id = m.round_id
+    WHERE  m.calendar_event_id   IS NULL
+      AND  m.slack_dm_channel_id IS NOT NULL
+      AND  r.status = 'completed'
+    ORDER  BY m.id ASC
+  `).all();
+}
+
+/**
  * Returns all unbooked matches whose parent round completed more than
  * `deadlineHours` ago. These are candidates for auto-booking.
  *
@@ -472,5 +488,6 @@ module.exports = {
   markCompletionMessageSent,
   saveSuggestionTs,
   getUnbookedMatchesPastDeadline,
+  getAllUnbookedMatches,
   getRecentMatchesForAdmin,
 };

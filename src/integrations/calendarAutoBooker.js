@@ -191,6 +191,7 @@ function bookingDeadlineHours(deadline) {
 
 module.exports = {
   runAutoBooking,
+  autoBookMatch,
   buildAutoBookedMessage,
   buildNoSlotsMessage,
   bookingDeadlineHours,
