@@ -29,7 +29,8 @@
     "test:fallback-days": "node --disable-warning=ExperimentalWarning scripts/test-post-meeting-step6.js",
     "test:slot-distribution": "node --disable-warning=ExperimentalWarning scripts/test-slot-distribution.js",
     "test:tz-intersection": "node --disable-warning=ExperimentalWarning scripts/test-timezone-intersection.js",
-    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:cal-connection && npm run test:cal-settings && npm run test:cal-freebusy && npm run test:cal-slot-logic && npm run test:cal-email-resolve && npm run test:cal-book-slot && npm run test:cal-create-event && npm run test:cal-tz-display && npm run test:meeting-completion && npm run test:slot-distribution && npm run test:tz-intersection"
+    "test:admin-commands": "node --disable-warning=ExperimentalWarning scripts/test-admin-commands.js",
+    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:cal-connection && npm run test:cal-settings && npm run test:cal-freebusy && npm run test:cal-slot-logic && npm run test:cal-email-resolve && npm run test:cal-book-slot && npm run test:cal-create-event && npm run test:cal-tz-display && npm run test:meeting-completion && npm run test:slot-distribution && npm run test:tz-intersection && npm run test:admin-commands"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",
