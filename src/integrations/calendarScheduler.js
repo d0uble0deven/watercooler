@@ -574,7 +574,8 @@ function formatSlotLabel(slot, timezoneId = 'UTC') {
     hour12:   true,
   }).format(slot.end);
 
-  return `${startStr} – ${endStr}`;
+  const abbr = getTzAbbr(slot.start, timezoneId);
+  return `${startStr} – ${endStr} ${abbr}`;
 }
 
 /**
