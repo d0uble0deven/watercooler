@@ -17,7 +17,7 @@
 const config           = require('../../config');
 const { getGraphClient } = require('../../integrations/msGraph');
 const { bookMeeting, buildConfirmationMessage, buildAlreadyBookedMessage } = require('../../integrations/calendarBooker');
-const { getMatch, getMatchUsers, saveBooking, saveMeetingTimes, getSettings } = require('../../lib/rounds');
+const { getMatch, getMatchUsers, saveBooking, claimBooking, releaseBookingClaim, saveMeetingTimes, getSettings } = require('../../lib/rounds');
 
 /**
  * Bolt action handler — registered in app.js for action IDs matching
@@ -47,16 +47,18 @@ async function handleBookSlot({ action, ack, body, client }) {
   const channelId = body.channel.id;
   const messageTs = body.message.ts;
 
-  // ── Guard: already booked? ─────────────────────────────────────────────────
-  const match = getMatch(matchId);
-  if (match?.calendar_event_id) {
-    // Someone else already booked — show the existing confirmation quietly
+  // ── Claim the booking slot (TOCTOU guard) ─────────────────────────────────
+  // Atomically writes 'pending' to calendar_event_id WHERE it is NULL.
+  // If another request already claimed or booked this match, bail out now —
+  // before making any Graph API call that would create a duplicate event.
+  if (!claimBooking(matchId)) {
+    const match = getMatch(matchId);
     try {
       await client.chat.update({
         channel: channelId,
         ts:      messageTs,
         text:    '✅ This meeting has already been booked!',
-        blocks:  buildAlreadyBookedMessage(match.teams_link),
+        blocks:  buildAlreadyBookedMessage(match?.teams_link ?? null),
       });
     } catch (err) {
       console.warn('[bookSlot] Could not update already-booked message:', err.message);
@@ -69,6 +71,7 @@ async function handleBookSlot({ action, ack, body, client }) {
   const emails = users.map((u) => u.slack_email).filter(Boolean);
 
   if (emails.length < users.length || users.length === 0) {
+    releaseBookingClaim(matchId);
     await safePostMessage(client, channelId,
       '⚠️ Couldn\'t book the meeting — some participants don\'t have email addresses on file.\n' +
       '_Make sure the `users:read.email` Slack scope is enabled and everyone has joined Watercooler._'
@@ -79,6 +82,7 @@ async function handleBookSlot({ action, ack, body, client }) {
   // ── Azure credentials check ────────────────────────────────────────────────
   const graphClient = getGraphClient();
   if (!graphClient) {
+    releaseBookingClaim(matchId);
     await safePostMessage(client, channelId,
       '⚠️ Calendar integration is not configured — Azure credentials are missing from `.env`.'
     );
@@ -90,6 +94,7 @@ async function handleBookSlot({ action, ack, body, client }) {
   try {
     booking = await bookMeeting(graphClient, users, slotStart, slotEnd);
   } catch (err) {
+    releaseBookingClaim(matchId); // let the user retry by clicking again
     console.error('[bookSlot] Graph API booking failed:', err.message);
     await safePostMessage(client, channelId,
       `⚠️ Couldn't create the calendar event: _${err.message}_\n` +

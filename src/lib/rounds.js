@@ -430,6 +430,32 @@ function saveBooking(matchId, { calendarEventId, teamsLink }) {
 }
 
 /**
+ * Atomically claims the booking slot for a match by writing a 'pending'
+ * sentinel to calendar_event_id ONLY if it is currently NULL.
+ *
+ * Returns true if this caller won the claim, false if another request already
+ * claimed or booked the match. Because node:sqlite runs synchronously on the
+ * Node event loop, the UPDATE is atomic — no two concurrent await-gaps can
+ * both see IS NULL and both win.
+ */
+function claimBooking(matchId) {
+  const result = getDb()
+    .prepare(`UPDATE matches SET calendar_event_id = 'pending' WHERE id = ? AND calendar_event_id IS NULL`)
+    .run(matchId);
+  return result.changes > 0;
+}
+
+/**
+ * Releases a 'pending' booking claim back to NULL so the slot can be retried.
+ * Only clears the sentinel — never touches a real event ID.
+ */
+function releaseBookingClaim(matchId) {
+  getDb()
+    .prepare(`UPDATE matches SET calendar_event_id = NULL WHERE id = ? AND calendar_event_id = 'pending'`)
+    .run(matchId);
+}
+
+/**
  * Stores a participant's feedback response on a match row.
  * @param {number} matchId
  * @param {'good'|'meh'|'snoozed'} feedback
@@ -568,6 +594,8 @@ module.exports = {
   getMatch,
   getMatchUsers,
   saveBooking,
+  claimBooking,
+  releaseBookingClaim,
   saveMeetingTimes,
   saveFeedback,
   markCompletionMessageSent,
