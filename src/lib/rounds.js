@@ -369,6 +369,47 @@ function saveMeetingTimes(matchId, start, end) {
     .run(start.toISOString(), end.toISOString(), matchId);
 }
 
+/**
+ * Returns the last `numRounds` rounds (any status) with their matches and
+ * participant names. Used by the `list-matches` admin command.
+ *
+ * @param {number} numRounds
+ * @returns {{ rounds: object[], matches: object[] }}
+ */
+function getRecentMatchesForAdmin(numRounds = 2) {
+  const db = getDb();
+
+  const rounds = db.prepare(
+    `SELECT * FROM rounds ORDER BY id DESC LIMIT ?`
+  ).all(numRounds);
+
+  if (rounds.length === 0) return { rounds: [], matches: [] };
+
+  const ids          = rounds.map((r) => r.id);
+  const placeholders = ids.map(() => '?').join(',');
+
+  const matches = db.prepare(`
+    SELECT
+      m.id,
+      m.round_id,
+      m.booked_at,
+      m.completion_message_sent,
+      m.calendar_suggestion_ts,
+      m.meeting_start_at,
+      m.calendar_event_id,
+      m.slack_dm_channel_id,
+      GROUP_CONCAT(u.display_name, ' & ') AS participants
+    FROM   matches m
+    LEFT JOIN match_members mm ON mm.match_id = m.id
+    LEFT JOIN users         u  ON u.id = mm.user_id
+    WHERE  m.round_id IN (${placeholders})
+    GROUP  BY m.id
+    ORDER  BY m.round_id DESC, m.id ASC
+  `).all(...ids);
+
+  return { rounds, matches };
+}
+
 // ── Settings write ────────────────────────────────────────────────────────────
 
 /**
@@ -431,4 +472,5 @@ module.exports = {
   markCompletionMessageSent,
   saveSuggestionTs,
   getUnbookedMatchesPastDeadline,
+  getRecentMatchesForAdmin,
 };
