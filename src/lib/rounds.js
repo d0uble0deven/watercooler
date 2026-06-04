@@ -336,6 +336,44 @@ function getRoundMatchCount(roundId) {
 }
 
 /**
+ * Returns a single round by ID.
+ */
+function getRoundById(roundId) {
+  return getDb()
+    .prepare(`SELECT * FROM rounds WHERE id = ?`)
+    .get(roundId);
+}
+
+/**
+ * Returns the most recent round that is not already cancelled.
+ * Used by `cancel-round` when no roundId is provided.
+ */
+function getMostRecentActiveRound() {
+  return getDb()
+    .prepare(`SELECT * FROM rounds WHERE status != 'cancelled' ORDER BY id DESC LIMIT 1`)
+    .get();
+}
+
+/**
+ * Returns all matches for a given round, including calendar booking state.
+ * Used by `cancel-round` to find what needs to be cleaned up.
+ */
+function getMatchesForRound(roundId) {
+  return getDb()
+    .prepare(`SELECT * FROM matches WHERE round_id = ? ORDER BY id ASC`)
+    .all(roundId);
+}
+
+/**
+ * Marks a round as cancelled. Safe to call on any status.
+ */
+function markRoundCancelled(roundId) {
+  getDb()
+    .prepare(`UPDATE rounds SET status = 'cancelled', completed_at = datetime('now') WHERE id = ?`)
+    .run(roundId);
+}
+
+/**
  * Returns every unbooked match from a completed round, regardless of age.
  * Used by the `force-book` admin command to bypass the deadline filter.
  */
@@ -535,6 +573,10 @@ module.exports = {
   markCompletionMessageSent,
   saveSuggestionTs,
   getUnbookedMatchesPastDeadline,
+  getRoundById,
+  getMostRecentActiveRound,
+  getMatchesForRound,
+  markRoundCancelled,
   getAllUnbookedMatches,
   getAllMatchesPendingCompletion,
   isRoundFullyComplete,

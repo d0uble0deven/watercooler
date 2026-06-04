@@ -27,6 +27,7 @@ const { listMatches } = require("./list-matches");
 const { forceBook }      = require("./force-book");
 const { sendCompletion }    = require("./send-completion");
 const { resendSuggestions } = require("./resend-suggestions");
+const { cancelRound }       = require("./cancel-round");
 
 const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin dry-run\` — preview matches without sending DMs
@@ -122,6 +123,9 @@ async function handleAdmin(command, text, respond, client) {
 
       case "resend-suggestions":
         return await resendSuggestions(command, args, respond, client);
+
+      case "cancel-round":
+        return await cancelRound(command, args, respond, client);
 
       default:
         return await respond(ADMIN_HELP);
