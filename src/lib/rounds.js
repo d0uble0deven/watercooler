@@ -430,6 +430,16 @@ function saveBooking(matchId, { calendarEventId, teamsLink }) {
 }
 
 /**
+ * Clears previous_event_id after the old event has been deleted (or attempted).
+ * Called by bookSlot after a successful reschedule booking.
+ */
+function clearPreviousEvent(matchId) {
+  getDb()
+    .prepare(`UPDATE matches SET previous_event_id = NULL WHERE id = ?`)
+    .run(matchId);
+}
+
+/**
  * Atomically claims the booking slot for a match by writing a 'pending'
  * sentinel to calendar_event_id ONLY if it is currently NULL.
  *
@@ -443,6 +453,27 @@ function claimBooking(matchId) {
     .prepare(`UPDATE matches SET calendar_event_id = 'pending' WHERE id = ? AND calendar_event_id IS NULL`)
     .run(matchId);
   return result.changes > 0;
+}
+
+/**
+ * Initiates a reschedule: copies calendar_event_id → previous_event_id and
+ * clears all booking fields so the match can be re-claimed and re-booked.
+ * The old MS365 event is NOT deleted here — it survives until the user
+ * confirms a new slot (bookSlot deletes it then via previous_event_id).
+ */
+function resetBooking(matchId) {
+  getDb()
+    .prepare(`
+      UPDATE matches
+      SET previous_event_id = calendar_event_id,
+          calendar_event_id  = NULL,
+          teams_link         = NULL,
+          booked_at          = NULL,
+          meeting_start_at   = NULL,
+          meeting_end_at     = NULL
+      WHERE id = ?
+    `)
+    .run(matchId);
 }
 
 /**
@@ -594,6 +625,8 @@ module.exports = {
   getMatch,
   getMatchUsers,
   saveBooking,
+  resetBooking,
+  clearPreviousEvent,
   claimBooking,
   releaseBookingClaim,
   saveMeetingTimes,

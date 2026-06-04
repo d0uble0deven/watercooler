@@ -84,6 +84,10 @@ async function start() {
   // directly in the browser; no server-side logic required.
   app.action('watercooler_join_teams', async ({ ack }) => { await ack(); });
 
+  // Reschedule button on the booking confirmation message
+  const { handleReschedule } = require('./commands/actions/reschedule');
+  app.action('watercooler_reschedule', handleReschedule);
+
   // Post-meeting feedback buttons (Phase 11 Step 4)
   const { handleMeetingGood, handleMeetingMeh, handleMeetingSnooze } =
     require('./commands/actions/meetingFeedback');

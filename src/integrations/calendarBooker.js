@@ -82,7 +82,7 @@ async function bookMeeting(graphClient, users, slotStart, slotEnd) {
  * @param {string}   timezoneId    IANA timezone for display (e.g. 'America/New_York')
  * @returns {object[]}             Slack blocks array
  */
-function buildConfirmationMessage(booking, users, timezoneId = 'UTC') {
+function buildConfirmationMessage(booking, users, timezoneId = 'UTC', matchId = null) {
   const timeLabel = formatSlotLabel({ start: booking.start, end: booking.end }, timezoneId);
   const nameList  = formatNameList(users.map((u) => u.display_name));
 
@@ -96,17 +96,29 @@ function buildConfirmationMessage(booking, users, timezoneId = 'UTC') {
     },
   ];
 
+  const actionElements = [];
+
   if (booking.teamsLink) {
-    blocks.push({
-      type:     'actions',
-      elements: [{
-        type:      'button',
-        text:      { type: 'plain_text', text: '🎥 Join Teams Meeting', emoji: true },
-        url:       booking.teamsLink,
-        action_id: 'watercooler_join_teams',
-        style:     'primary',
-      }],
+    actionElements.push({
+      type:      'button',
+      text:      { type: 'plain_text', text: '🎥 Join Teams Meeting', emoji: true },
+      url:       booking.teamsLink,
+      action_id: 'watercooler_join_teams',
+      style:     'primary',
     });
+  }
+
+  if (matchId != null) {
+    actionElements.push({
+      type:      'button',
+      text:      { type: 'plain_text', text: '🔄 Reschedule', emoji: true },
+      value:     String(matchId),
+      action_id: 'watercooler_reschedule',
+    });
+  }
+
+  if (actionElements.length > 0) {
+    blocks.push({ type: 'actions', elements: actionElements });
   }
 
   blocks.push({

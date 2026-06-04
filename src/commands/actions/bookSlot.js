@@ -17,7 +17,7 @@
 const config           = require('../../config');
 const { getGraphClient } = require('../../integrations/msGraph');
 const { bookMeeting, buildConfirmationMessage, buildAlreadyBookedMessage } = require('../../integrations/calendarBooker');
-const { getMatch, getMatchUsers, saveBooking, claimBooking, releaseBookingClaim, saveMeetingTimes, getSettings } = require('../../lib/rounds');
+const { getMatch, getMatchUsers, saveBooking, claimBooking, releaseBookingClaim, saveMeetingTimes, getSettings, clearPreviousEvent } = require('../../lib/rounds');
 
 /**
  * Bolt action handler — registered in app.js for action IDs matching
@@ -104,6 +104,10 @@ async function handleBookSlot({ action, ack, body, client }) {
   }
 
   // ── Persist to DB ──────────────────────────────────────────────────────────
+  // Re-fetch to get previous_event_id before saveBooking overwrites the row
+  const matchBeforeSave = getMatch(matchId);
+  const previousEventId = matchBeforeSave?.previous_event_id ?? null;
+
   saveBooking(matchId, {
     calendarEventId: booking.eventId,
     teamsLink:       booking.teamsLink,
@@ -111,6 +115,23 @@ async function handleBookSlot({ action, ack, body, client }) {
   saveMeetingTimes(matchId, slotStart, slotEnd);
 
   console.log(`[bookSlot] Match ${matchId} booked → event ${booking.eventId}`);
+
+  // ── Delete old event if this was a reschedule ──────────────────────────────
+  if (previousEventId) {
+    clearPreviousEvent(matchId);
+    try {
+      const organizer = users.find((u) => u.slack_email)?.slack_email;
+      if (organizer) {
+        await graphClient
+          .api(`/users/${encodeURIComponent(organizer)}/events/${encodeURIComponent(previousEventId)}`)
+          .delete();
+        console.log(`[bookSlot] Deleted old event ${previousEventId} for match ${matchId}`);
+      }
+    } catch (err) {
+      // Non-fatal — old event may already be gone or Graph may be flaky
+      console.warn(`[bookSlot] Could not delete old event for match ${matchId}:`, err.message);
+    }
+  }
 
   // ── Update Slack message (replace buttons with confirmation) ────────────────
   const settings = getSettings();
@@ -121,7 +142,7 @@ async function handleBookSlot({ action, ack, body, client }) {
       channel: channelId,
       ts:      messageTs,
       text:    '✅ Meeting booked!',
-      blocks:  buildConfirmationMessage(booking, users, timezone),
+      blocks:  buildConfirmationMessage(booking, users, timezone, matchId),
     });
   } catch (err) {
     // Non-fatal — the booking was made, we just couldn't update the message

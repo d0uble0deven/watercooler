@@ -125,6 +125,8 @@ const MIGRATIONS = [
   `ALTER TABLE users    ADD COLUMN ms_timezone              TEXT`,
   // Admin commands — round summary posted to channel once all completions are sent
   `ALTER TABLE rounds   ADD COLUMN summary_sent             INTEGER NOT NULL DEFAULT 0`,
+  // Reschedule flow — preserves old event ID until new slot is confirmed
+  `ALTER TABLE matches  ADD COLUMN previous_event_id        TEXT`,
 ];
 
 function runMigrations(db) {
