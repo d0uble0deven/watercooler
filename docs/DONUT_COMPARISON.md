@@ -12,7 +12,7 @@ A breakdown of what our custom Watercooler app covers today vs. the full feature
 | Repeat-pair avoidance | ✅ Tracks full history | ✅ Configurable window (default: 4 rounds) |
 | Configurable group size | ✅ 2–8 people | ✅ 2–3 (pairs + 1 trio for odd counts) |
 | Odd-number handling | ✅ | ✅ One trio automatically |
-| Configurable cadence | ✅ Weekly / every 2 wks / every 4 wks | ✅ Weekly / biweekly / monthly |
+| Configurable cadence | ✅ Weekly / every 2 wks / every 4 wks | ✅ Weekly / biweekly / triweekly / monthly |
 | Scheduled auto-run | ✅ | ✅ Configurable day + time |
 | Manual admin-triggered run | ✅ | ✅ `/watercooler admin run` |
 | Dry-run preview before sending | ✅ | ✅ `/watercooler admin dry-run` |
@@ -31,7 +31,7 @@ A breakdown of what our custom Watercooler app covers today vs. the full feature
 |---|---|---|
 | Opt in to matching | ✅ Join channel | ✅ `/watercooler join` |
 | Opt out of matching | ✅ Leave channel | ✅ `/watercooler leave` |
-| Pause / skip rounds | ✅ Snooze up to 4 rounds | 🟡 Pause works but is indefinite — no round limit |
+| Pause / skip rounds | ✅ Snooze up to 4 rounds | 🟡 Pause is indefinite — no automatic round-count limit |
 | Resume after pause | ✅ | ✅ `/watercooler resume` |
 | Check own status | ✅ | ✅ `/watercooler status` |
 | Snooze for a specific number of rounds | ✅ 1–4 rounds | ❌ Not built |
@@ -52,8 +52,12 @@ A breakdown of what our custom Watercooler app covers today vs. the full feature
 | Lift an exclusion | ✅ | ✅ `/watercooler admin include @user` |
 | View current settings | ✅ | ✅ `/watercooler admin settings` |
 | Update settings | ✅ Web dashboard | 🟡 Slack commands only — no web dashboard |
-| View round history | ✅ Dashboard + CSV | 🟡 Last 5 rounds via Slack command only |
+| View round history | ✅ Dashboard + CSV | 🟡 Recent rounds via Slack command only |
 | Participant count summary | ✅ | ✅ `/watercooler admin summary` |
+| View match state + IDs | ✅ Dashboard | ✅ `/watercooler admin list-matches` |
+| Force-book a meeting | ✅ | ✅ `/watercooler admin force-book` |
+| Cancel a round | ✅ | ✅ `/watercooler admin cancel-round` |
+| Re-send calendar suggestions | ✅ | ✅ `/watercooler admin resend-suggestions` |
 | Pause matching for the whole team | ✅ | ❌ Not built |
 | Skip just the next round | ✅ | ❌ Not built |
 | Multi-channel support (multiple programs per workspace) | ✅ | ❌ Single program per workspace today |
@@ -69,10 +73,14 @@ A breakdown of what our custom Watercooler app covers today vs. the full feature
 |---|---|---|
 | Automated matching on a schedule | ✅ | ✅ |
 | Google Calendar integration | ✅ Free tier | ❌ Not built |
-| Microsoft Outlook integration | ✅ | ❌ Not built |
+| Microsoft Outlook integration | ✅ | ✅ Free/busy queries, slot suggestions, calendar event creation |
 | Zoom integration | ✅ Free tier | ❌ Not built |
-| Google Meet / MS Teams integration | ✅ | ❌ Not built |
-| Users schedule meeting themselves (default flow) | ✅ | ✅ Current behaviour |
+| Google Meet / MS Teams integration | ✅ | ✅ Teams link auto-generated in every calendar invite |
+| Suggested meeting times posted in DM | ✅ | ✅ Up to 3 free slots posted as clickable buttons |
+| One-click calendar booking | ✅ | ✅ Picks slot → creates Outlook event + Teams link |
+| Auto-booking when nobody responds | ✅ | ✅ Books best slot after configurable deadline (default 2.5 days) |
+| User-initiated reschedule | ✅ | ✅ Reschedule button on confirmation; deferred old-event deletion |
+| Per-user timezone awareness | ✅ | ✅ Reads each user's M365 timezone; computes shared window |
 
 ---
 
@@ -82,10 +90,11 @@ A breakdown of what our custom Watercooler app covers today vs. the full feature
 |---|---|---|
 | Intro DM sent to matched group | ✅ | ✅ |
 | Channel announcement when round fires | ✅ | ✅ Posts to configured channel if set |
+| Round-complete summary to channel | ✅ | ✅ Posted once all matches in a round are done |
+| Post-meeting feedback buttons | ✅ | ✅ "Great" / "Fine" / "Snooze me" — sent after meeting time passes |
 | Conversation starter prompts (on demand) | ✅ | ❌ Not built |
 | Watercooler discussion topics posted to a channel | ✅ | ❌ Not built |
 | Curated topic packs (New Managers, Interns, etc.) | ✅ | ❌ Not built |
-| Post-meeting compliments / feedback | ✅ | ❌ Not built |
 | Peer-to-peer recognition (Shoutouts + points) | ✅ Premium | ❌ Not built |
 | Rewards store | ✅ Premium | ❌ Not built |
 | Birthday & work anniversary celebrations | ✅ | ❌ Not built |
@@ -97,9 +106,9 @@ A breakdown of what our custom Watercooler app covers today vs. the full feature
 | Feature | Donut | Watercooler |
 |---|---|---|
 | Participant counts (eligible / paused / excluded) | ✅ | ✅ `/watercooler admin summary` |
-| Round history | ✅ Full dashboard | 🟡 Last 5 rounds via Slack command |
+| Round history | ✅ Full dashboard | 🟡 Recent rounds via Slack command |
 | Participation rate tracking | ✅ Dashboard + email | ❌ Not built |
-| Meeting confirmation ("did they actually meet?") | ✅ | ❌ Not built |
+| Meeting confirmation ("did they actually meet?") | ✅ | 🟡 Tracked via post-meeting feedback buttons — no dashboard |
 | CSV export of match data | ✅ | ❌ Not built — data is in SQLite, exportable manually |
 | Email reports | ✅ | ❌ Not built |
 | Web dashboard | ✅ donut.ai | ❌ Not built |
@@ -138,9 +147,9 @@ The gaps vs. Donut fall into three tiers of priority:
 
 | Gap | Notes |
 |---|---|
-| **Auto-enroll new hires (opt-out by default)** | **Decided: build next.** Listen for Slack's `team_join` event, auto-create the user as active, send a welcome DM explaining the program and how to leave. Matches how Donut works — higher participation without requiring action from new employees. |
-| **Outlook calendar integration + Teams auto-booking** | **Decided: build after auto-enroll.** See `docs/OUTLOOK_INTEGRATION.md` for the full plan. After matching, app reads both calendars, suggests 3+ free 15-min slots in the DM as clickable buttons, creates a Teams invite when one person confirms. Auto-books after 2.5 days (configurable, supports decimals) if nobody responds. Disabled by default behind `CALENDAR_ENABLED` flag — requires one-time Azure AD setup with IT. |
-| Participation rate tracking | Track whether matched users confirm they met |
+| **Auto-enroll new hires (opt-out by default)** | Listen for Slack's `team_join` event, auto-create the user as active, send a welcome DM explaining the program and how to leave. Matches how Donut works — higher participation without requiring action from new employees. |
+| ~~Outlook calendar integration + Teams auto-booking~~ | ✅ **Done.** Free/busy queries, slot suggestions with clickable buttons, auto-booking, Teams links, reschedule flow, per-user timezone awareness. See `docs/OUTLOOK_INTEGRATION.md`. |
+| Participation rate tracking | Track whether matched users confirm they met — feedback buttons capture responses but no summary/dashboard yet |
 | CSV export of match history | Query the SQLite DB and format as CSV |
 | Smart matching (avoid pairing people already in the same channels) | Requires reading Slack channel membership at match time |
 | Cross-team / within-team matching rules | Tag users with a team attribute, filter in the matching engine |

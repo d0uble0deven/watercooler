@@ -8,6 +8,7 @@ Internal Slack app for casual 1:1 social matching — similar to Donut, self-hos
 
 | Document | What it covers |
 |---|---|
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | End-user and admin guide — all Slack commands explained |
 | [docs/SLACK_CONCEPTS.md](docs/SLACK_CONCEPTS.md) | Plain-English guide to every Slack concept used in this app |
 | [docs/PRODUCTION.md](docs/PRODUCTION.md) | Step-by-step deployment guide — Slack setup, scopes, hosting, monitoring |
 | [docs/DONUT_COMPARISON.md](docs/DONUT_COMPARISON.md) | Feature comparison vs. Donut, and a prioritised list of future additions |
@@ -48,7 +49,7 @@ See [docs/PRODUCTION.md](docs/PRODUCTION.md) for the full step-by-step guide, in
 Short version:
 1. Create a Slack app at https://api.slack.com/apps
 2. Enable Socket Mode → generate an App-Level Token (`xapp-...`)
-3. Add bot scopes: `commands`, `chat:write`, `im:write`, `mpim:write`
+3. Add bot scopes: `commands`, `chat:write`, `im:write`, `mpim:write`, `users:read`, `users:read.email`
 4. Install to workspace → copy Bot Token (`xoxb-...`)
 5. Copy Signing Secret from Basic Information
 6. Fill in `.env` with all three tokens + `ADMIN_USER_IDS`
@@ -70,23 +71,46 @@ Short version:
 
 ### Admin commands — restricted to `ADMIN_USER_IDS`
 
+#### Running rounds
+
 | Command | Description |
 |---|---|
 | `/watercooler admin dry-run` | Preview matches without sending any DMs |
+| `/watercooler admin test-run` | Full run with a 🧪 test disclaimer on all messages |
 | `/watercooler admin run` | Trigger a matching round and send intro DMs |
+
+#### Monitoring
+
+| Command | Description |
+|---|---|
 | `/watercooler admin summary` | Participant counts at a glance |
 | `/watercooler admin participants` | List everyone eligible for the next round |
 | `/watercooler admin paused` | List everyone currently paused |
 | `/watercooler admin settings` | Show current app settings |
-| `/watercooler admin recent-rounds` | Show the last 5 completed rounds |
+| `/watercooler admin recent-rounds` | Show the last few completed rounds |
+
+#### Configuration
+
+| Command | Description |
+|---|---|
 | `/watercooler admin set group-size <n>` | Set pair/group size (must be ≥ 2) |
-| `/watercooler admin set cadence weekly\|biweekly\|monthly` | Set matching frequency |
-| `/watercooler admin set intro-day <day>` | Set which day of the week the scheduler fires |
-| `/watercooler admin set intro-time <HH:MM>` | Set what time the scheduler fires (24-hour) |
+| `/watercooler admin set cadence weekly\|biweekly\|triweekly\|monthly` | Set matching frequency |
 | `/watercooler admin set avoid-repeat-rounds <n>` | Repeat-avoidance window (0 = off) |
-| `/watercooler admin set channel <channel-id>` | Channel for round announcements |
+| `/watercooler admin set channel <channel-id>` | Channel for round-complete announcements |
 | `/watercooler admin exclude @user` | Prevent a user from being matched |
 | `/watercooler admin include @user` | Lift an exclusion |
+| `/watercooler admin refresh-names` | Re-fetch display names from Slack profiles |
+| `/watercooler admin calendar-status` | Check Microsoft Graph connection |
+
+#### Workflow recovery
+
+| Command | Description |
+|---|---|
+| `/watercooler admin list-matches` | Show recent match IDs, participants, and workflow state |
+| `/watercooler admin force-book [matchId]` | Auto-book one match or all unbooked matches now |
+| `/watercooler admin send-completion [matchId]` | Send post-meeting message to one or all qualifying matches |
+| `/watercooler admin resend-suggestions <matchId>` | Re-post calendar slot buttons for a match |
+| `/watercooler admin cancel-round [roundId]` | Cancel a round and notify all affected DMs |
 
 ---
 
@@ -96,13 +120,31 @@ Short version:
 |---|---|
 | `npm start` | Start the app |
 | `npm run dev` | Start with file watching (auto-restart) |
-| `npm run db:init` | Create tables (safe to re-run) |
+| `npm run db:init` | Create tables and run migrations (safe to re-run) |
 | `npm run db:reset` | Drop and recreate all tables (dev only) |
-| `npm test` | Run matching engine unit tests (35 tests) |
-| `npm run test:commands` | Smoke test user commands |
-| `npm run test:dry-run` | Smoke test dry-run |
-| `npm run test:admin` | Smoke test all admin commands (38 tests) |
-| `npm run test:scheduler` | Smoke test scheduler logic (41 tests) |
+| `npm test` | Matching engine unit tests (node:test) |
+| `npm run test:commands` | User command smoke tests |
+| `npm run test:dry-run` | Dry-run smoke test |
+| `npm run test:run` | Run smoke test (mock Slack client) |
+| `npm run test:admin` | Admin command smoke tests |
+| `npm run test:scheduler` | Scheduler logic tests |
+| `npm run test:cal-connection` | Microsoft Graph connection test |
+| `npm run test:cal-settings` | Calendar settings tests |
+| `npm run test:cal-freebusy` | Free/busy query tests |
+| `npm run test:cal-slot-logic` | Slot finder logic tests |
+| `npm run test:cal-email-resolve` | Email resolution tests |
+| `npm run test:cal-book-slot` | Slot booking tests |
+| `npm run test:cal-create-event` | Calendar event creation tests |
+| `npm run test:cal-tz-display` | Timezone display tests |
+| `npm run test:meeting-completion` | Post-meeting completion tests |
+| `npm run test:meeting-feedback` | Feedback message tests |
+| `npm run test:round-stats` | Round statistics tests |
+| `npm run test:completion-message` | Completion message builder tests |
+| `npm run test:fallback-days` | Fallback deadline tests |
+| `npm run test:slot-distribution` | Slot distribution tests (34 tests) |
+| `npm run test:tz-intersection` | Timezone intersection tests (47 tests) |
+| `npm run test:admin-commands` | Admin workflow command tests (40 tests) |
+| `npm run test:reschedule` | Reschedule flow tests (21 tests) |
 | `npm run test:all` | Run all test suites in sequence |
 
 ---
@@ -116,9 +158,20 @@ src/
   commands/
     index.js          — registers /watercooler with Bolt, routes subcommands
     user/             — join, pause, resume, leave, status
-    admin/            — index (router + admin guard), dry-run, run, summary,
-                        participants, paused, show-settings, recent-rounds,
-                        set, exclusions
+    admin/            — index (router + admin guard), dry-run, test-run, run,
+                        summary, participants, paused, show-settings, recent-rounds,
+                        set, exclusions, calendar-status, refresh-names,
+                        list-matches, force-book, send-completion,
+                        resend-suggestions, cancel-round
+    actions/          — bookSlot (slot button handler), meetingFeedback,
+                        reschedule (reschedule button handler)
+  integrations/
+    msGraph.js        — Microsoft Graph client (app-only auth via Azure AD)
+    calendarReader.js — free/busy queries via Graph API
+    calendarScheduler.js — slot suggestion orchestration, timezone intersection
+    calendarBooker.js — calendar event creation, confirmation message builder
+    calendarAutoBooker.js — automatic booking when deadline passes
+    meetingCompleter.js — post-meeting follow-up and round-complete channel summary
   matching/
     engine.js         — pure matching algorithm (Fisher-Yates + greedy repeat-avoidance)
   scheduler/
@@ -127,15 +180,20 @@ src/
     messaging.js      — conversations.open, chat.postMessage, intro message builder
   db/
     connection.js     — node:sqlite singleton
-    init.js           — CREATE TABLE IF NOT EXISTS, default settings seed
+    init.js           — CREATE TABLE IF NOT EXISTS + ALTER TABLE migrations
   lib/
-    users.js          — user + exclusion DB helpers
-    rounds.js         — round, match, pair history, settings DB helpers
+    users.js          — user + exclusion DB helpers, email + timezone cache
+    rounds.js         — round, match, booking, pair history, settings DB helpers
+    slotFinder.js     — free-slot algorithm with prime-hours preference
+    retryHelper.js    — exponential backoff wrapper for Graph API calls
     adminGuard.js     — isAdmin() check
 docs/
+  USER_MANUAL.md      — end-user and admin Slack command reference
   SLACK_CONCEPTS.md   — Slack app concepts reference
   PRODUCTION.md       — deployment guide
   DONUT_COMPARISON.md — feature comparison vs. Donut
+  OUTLOOK_INTEGRATION.md — Azure AD + calendar setup guide
+  AZURE_DEPLOYMENT.md — Azure VM hosting guide
 scripts/
   db-init.js          — run db init standalone
   db-reset.js         — wipe and recreate (dev only)
@@ -144,22 +202,44 @@ scripts/
   test-run.js         — run smoke test (mock Slack client)
   test-admin.js       — admin command smoke tests
   test-scheduler.js   — scheduler logic tests
+  test-calendar-*.js  — calendar integration tests (connection through tz display)
+  test-post-meeting-*.js — post-meeting flow tests
+  test-slot-distribution.js  — slot distribution algorithm tests
+  test-slot-finder.js        — slot finder unit tests
+  test-timezone-intersection.js — multi-timezone overlap tests
+  test-admin-commands.js     — workflow recovery command tests
+  test-reschedule.js         — reschedule flow tests
 tests/
-  matching.test.js    — 35 unit tests (node:test)
+  matching.test.js    — matching engine unit tests (node:test)
 ```
 
 ---
 
 ## Environment Variables
 
-See [`.env.example`](.env.example) for the full list. Required for Slack:
+See [`.env.example`](.env.example) for the full list.
 
 ```env
+# Slack (required)
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 SLACK_APP_TOKEN=xapp-...
 ADMIN_USER_IDS=U01ABC123,U02DEF456
-SCHEDULING_ENABLED=true   # false in local dev
+
+# Server
+PORT=3000
+DATABASE_PATH=./data/watercooler.db
+SCHEDULING_ENABLED=true        # false in local dev
+
+# Calendar / Microsoft 365 (optional — enables slot suggestions + auto-booking)
+AZURE_TENANT_ID=...
+AZURE_CLIENT_ID=...
+AZURE_CLIENT_SECRET=...
+CALENDAR_ENABLED=true
+CALENDAR_TIMEZONE=America/New_York
+
+# Branding (optional — appears in calendar invite emails)
+CONTACT_NAME=Your Name
 ```
 
 ---
@@ -170,9 +250,14 @@ SCHEDULING_ENABLED=true   # false in local dev
 - [x] Phase 1 — Basic app skeleton (Express, health endpoint)
 - [x] Phase 2 — SQLite persistence (schema, db:init, db:reset)
 - [x] Phase 3 — User participation commands (join, pause, resume, leave, status)
-- [x] Phase 4 — Matching engine (Fisher-Yates, greedy repeat-avoidance, 35 unit tests)
+- [x] Phase 4 — Matching engine (Fisher-Yates, greedy repeat-avoidance)
 - [x] Phase 5 — Admin dry run
 - [x] Phase 6 — Admin real run (Slack DMs, pair history, partial-failure tolerance)
 - [x] Phase 7 — Admin management commands (summary, participants, set, exclude/include, etc.)
 - [x] Phase 8 — Scheduled automation (minute-tick scheduler, cadence guard)
 - [x] Phase 9 — Production hardening (crash recovery, graceful shutdown, deployment guide)
+- [x] Phase 10 — Outlook/Teams calendar integration (free/busy queries, slot suggestions, auto-booking, Teams links)
+- [x] Phase 11 — Post-meeting follow-up (completion detection, feedback buttons, round-complete channel summary)
+- [x] Timezone awareness — per-user M365 timezones, shared-window intersection, DST-correct display
+- [x] Admin workflow commands — list-matches, force-book, send-completion, resend-suggestions, cancel-round
+- [x] Reschedule flow — user-initiated reschedule button; deferred old-event deletion after new slot confirmed
