@@ -125,15 +125,65 @@ console.log('\n=== Admin Commands Tests ===\n');
   console.log('\nlist-matches');
   {
     const { msgs, respond } = captureRespond();
-    await listMatches({ user_id: 'U_TEST' }, respond);
+    await listMatches({ user_id: 'U_TEST' }, '', respond);
 
     check('produces at least one response',       msgs.length >= 1);
     const out = msgs.join('\n');
     check('output mentions "Round"',              out.includes('Round'));
     check('output contains match ID backtick',    out.includes('`#'));
     check('output contains usage hint',           out.includes('force-book') || out.includes('list-matches'));
-    check('state label present (Booked/Completed/Awaiting/Intro)',
-      out.includes('📅') || out.includes('✅') || out.includes('⏳') || out.includes('📨'));
+    check('state label present (Booked/Completed/Awaiting/Intro/No DM)',
+      out.includes('📅') || out.includes('✅') || out.includes('⏳') || out.includes('📨') || out.includes('⚠️'));
+  }
+
+  // ── list-matches — arguments ────────────────────────────────────────────────
+  console.log('\nlist-matches — arguments');
+  {
+    const cmd = { user_id: 'U_TEST' };
+
+    // Specific round (historic lookup) — use a real round from the DB
+    const active = getMostRecentActiveRound();
+    if (active) {
+      const { msgs, respond } = captureRespond();
+      await listMatches(cmd, String(active.id), respond);
+      check('specific round: header names the round',
+        msgs[0].includes(`round #${active.id}`));
+      check('specific round: shows the round line',
+        msgs[0].includes(`Round ${active.id}`));
+    } else {
+      check('specific round (skipped — no rounds)', true);
+      check('specific round (skipped — no rounds)', true);
+    }
+
+    // Round not found
+    const { msgs: m1, respond: r1 } = captureRespond();
+    await listMatches(cmd, '999999', r1);
+    check('nonexistent round fires not-found error', m1[0].includes('not found'));
+
+    // last <n>
+    const { msgs: m2, respond: r2 } = captureRespond();
+    await listMatches(cmd, 'last 3', r2);
+    check('last 3 produces a response with rounds', m2[0].includes('Round'));
+
+    // last <n> over the cap
+    const { msgs: m3, respond: r3 } = captureRespond();
+    await listMatches(cmd, 'last 99', r3);
+    check('last 99 fires cap error',                m3[0].includes('between 1 and 10'));
+
+    // last 0 under the floor
+    const { msgs: m4, respond: r4 } = captureRespond();
+    await listMatches(cmd, 'last 0', r4);
+    check('last 0 fires cap error',                 m4[0].includes('between 1 and 10'));
+
+    // Garbage input
+    const { msgs: m5, respond: r5 } = captureRespond();
+    await listMatches(cmd, 'banana', r5);
+    check('invalid arg fires usage error',          m5[0].includes('Usage'));
+
+    // "last" with no number
+    const { msgs: m6, respond: r6 } = captureRespond();
+    await listMatches(cmd, 'last', r6);
+    check('bare "last" fires usage error',          m6[0].includes('Usage'));
   }
 
   // ── force-book guards ───────────────────────────────────────────────────────

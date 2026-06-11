@@ -46,7 +46,7 @@ const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin include @user\` — lift an exclusion
 • \`/watercooler admin calendar-status\` — check Microsoft Graph connection
 • \`/watercooler admin refresh-names\` — update display names to real names from Slack profiles
-• \`/watercooler admin list-matches\` — show recent match IDs, participants, and workflow state
+• \`/watercooler admin list-matches [roundId | last <n>]\` — show match IDs, participants, and workflow state (default: last 2 rounds, max 10)
 • \`/watercooler admin force-book [matchId]\` — auto-book one match or all unbooked matches now
 • \`/watercooler admin send-completion [matchId]\` — send feedback message for one or all qualifying matches
 • \`/watercooler admin resend-suggestions <matchId>\` — re-post calendar slot buttons for a match
@@ -113,7 +113,7 @@ async function handleAdmin(command, text, respond, client) {
         return await refreshNames(command, respond, client);
 
       case "list-matches":
-        return await listMatches(command, respond);
+        return await listMatches(command, args, respond);
 
       case "force-book":
         return await forceBook(command, args, respond, client);

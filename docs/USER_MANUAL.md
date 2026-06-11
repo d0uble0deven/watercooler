@@ -251,13 +251,15 @@ Verifies that the Azure credentials are configured and that the app can reach th
 
 These commands exist so admins can manually drive the matching workflow if something goes wrong — a Graph API error, a missed DM, a slot that never got suggested, etc. Run `/watercooler admin list-matches` first to get the match and round IDs you need.
 
-#### See recent matches and their state
+#### See matches and their state
 
 ```
 /watercooler admin list-matches
+/watercooler admin list-matches <roundId>
+/watercooler admin list-matches last <n>
 ```
 
-Shows the last two rounds with every match, participant names, and a workflow state indicator:
+Shows rounds with every match, participant names, and a workflow state indicator. Without arguments, shows the last two rounds. Pass a round ID to look up any historic round (including cancelled ones), or `last <n>` to see up to the last 10 rounds at once.
 
 | Symbol | Meaning |
 |--------|---------|

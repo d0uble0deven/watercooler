@@ -528,25 +528,15 @@ function saveMeetingTimes(matchId, start, end) {
 }
 
 /**
- * Returns the last `numRounds` rounds (any status) with their matches and
- * participant names. Used by the `list-matches` admin command.
- *
- * @param {number} numRounds
- * @returns {{ rounds: object[], matches: object[] }}
+ * Returns matches (with GROUP_CONCAT participant names) for a set of round IDs.
+ * Shared by the two list-matches query paths below.
  */
-function getRecentMatchesForAdmin(numRounds = 2) {
-  const db = getDb();
+function getMatchesWithParticipants(roundIds) {
+  if (roundIds.length === 0) return [];
 
-  const rounds = db.prepare(
-    `SELECT * FROM rounds ORDER BY id DESC LIMIT ?`
-  ).all(numRounds);
+  const placeholders = roundIds.map(() => '?').join(',');
 
-  if (rounds.length === 0) return { rounds: [], matches: [] };
-
-  const ids          = rounds.map((r) => r.id);
-  const placeholders = ids.map(() => '?').join(',');
-
-  const matches = db.prepare(`
+  return getDb().prepare(`
     SELECT
       m.id,
       m.round_id,
@@ -563,9 +553,36 @@ function getRecentMatchesForAdmin(numRounds = 2) {
     WHERE  m.round_id IN (${placeholders})
     GROUP  BY m.id
     ORDER  BY m.round_id DESC, m.id ASC
-  `).all(...ids);
+  `).all(...roundIds);
+}
 
-  return { rounds, matches };
+/**
+ * Returns the last `numRounds` rounds (any status) with their matches and
+ * participant names. Used by the `list-matches` admin command.
+ *
+ * @param {number} numRounds
+ * @returns {{ rounds: object[], matches: object[] }}
+ */
+function getRecentMatchesForAdmin(numRounds = 2) {
+  const rounds = getDb().prepare(
+    `SELECT * FROM rounds ORDER BY id DESC LIMIT ?`
+  ).all(numRounds);
+
+  return { rounds, matches: getMatchesWithParticipants(rounds.map((r) => r.id)) };
+}
+
+/**
+ * Returns one specific round (any status, any age) with its matches and
+ * participant names. Used by `list-matches <roundId>` for historic lookups.
+ *
+ * @param {number} roundId
+ * @returns {{ rounds: object[], matches: object[] }} rounds is empty if not found
+ */
+function getRoundMatchesForAdmin(roundId) {
+  const round = getDb().prepare(`SELECT * FROM rounds WHERE id = ?`).get(roundId);
+  if (!round) return { rounds: [], matches: [] };
+
+  return { rounds: [round], matches: getMatchesWithParticipants([round.id]) };
 }
 
 // ── Settings write ────────────────────────────────────────────────────────────
@@ -644,4 +661,5 @@ module.exports = {
   markRoundSummarySent,
   getRoundMatchCount,
   getRecentMatchesForAdmin,
+  getRoundMatchesForAdmin,
 };

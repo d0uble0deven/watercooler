@@ -106,7 +106,7 @@ Short version:
 
 | Command | Description |
 |---|---|
-| `/watercooler admin list-matches` | Show recent match IDs, participants, and workflow state |
+| `/watercooler admin list-matches [roundId \| last <n>]` | Show match IDs, participants, and workflow state (default: last 2 rounds, max 10) |
 | `/watercooler admin force-book [matchId]` | Auto-book one match or all unbooked matches now |
 | `/watercooler admin send-completion [matchId]` | Send post-meeting message to one or all qualifying matches |
 | `/watercooler admin resend-suggestions <matchId>` | Re-post calendar slot buttons for a match |
