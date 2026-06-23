@@ -6,6 +6,19 @@
 
 ---
 
+## Who Does What
+
+This guide is split between two people:
+
+- **🔑 Admin** — someone with Azure permissions to register resource providers, create resource groups, and create the VM. These steps require subscription-level rights.
+- **🙋 You** — the app maintainer. You don't have admin rights, but once the Admin hands over a running VM (its IP address + SSH access), you can do everything else: install Node, deploy the code, set environment variables, and keep it running.
+
+Each step below is tagged with who performs it. **Steps 0–1 are the Admin's.** Everything from Step 2 onward is yours.
+
+> ⚠️ **Before the Admin starts:** confirm VMs are even allowed on the target subscription. Some restricted subscriptions (e.g. partner/sponsored ones) have the **Microsoft.Compute** provider disabled and block VM creation entirely. If that's the case, this VM path won't work and you'll need the App Service path instead — ask the Admin to confirm first so no time is wasted.
+
+---
+
 ## What You're Deploying
 
 Watercooler is a Node.js app that:
@@ -26,31 +39,80 @@ Just a VM with Node.js installed, an internet connection, and the app running as
 
 ## Recommended Approach: Azure VM with SQLite
 
-An Azure VM is the simplest path. The SQLite database is a single file that lives on the VM's disk — nothing special to configure for persistence. The app already reads its connection string from an environment variable, so no code changes are needed.
+An Azure VM is the simplest path. The database is **SQLite** — a single file that lives on the VM's disk. There is **no database server and no connection string**; the app just reads/writes a file at the path given by the `DATABASE_PATH` environment variable. Nothing extra to provision, no code changes needed.
 
-**Recommended VM size:** `B1s` or `B2s` (1–2 vCPUs, 1–4 GB RAM) — the app is very lightweight.
+> 💡 If an Admin (or another tool) set up an **Azure SQL database**, it is **not used** by this app and can be deleted — see the cleanup note at the end. This app uses SQLite only.
 
-**OS:** Ubuntu 22.04 LTS (or any Linux distro you're comfortable with)
+**Recommended VM size:** `B1s` (1 vCPU, 1 GB RAM, ~$8/mo) is plenty for ~50 users. `B2s` (~$30/mo) adds headroom if you want it. Avoid the portal's default size (often `D2s_v3` at ~$70/mo) — it's far more than this app needs.
 
----
-
-## Step 1 — Provision the VM
-
-1. In the Azure Portal, go to **Virtual Machines → Create**
-2. Choose your subscription and resource group (or create a new one, e.g. `watercooler-rg`)
-3. Select a region close to your team
-4. Image: **Ubuntu Server 22.04 LTS**
-5. Size: **B2s** is plenty
-6. Authentication: SSH public key (recommended) or password
-7. Under **Networking**, make sure port **22 (SSH)** is open for your IP
-   - The app does **not** need any other inbound ports — it connects out to Slack, not the other way
-8. Click **Review + Create** → **Create**
-
-Once the VM is created, note its **public IP address**.
+**OS:** Ubuntu Server 24.04 LTS
 
 ---
 
-## Step 2 — Connect and Install Node.js
+## Step 0 — Subscription Setup  🔑 *Admin*
+
+These cause the "resource provider not registered / no permission to create resource groups" errors if skipped. They're one-time, subscription-level actions only an Admin can do.
+
+1. **Register resource providers.** Subscription → **Resource providers** → search for and **Register** each of:
+   - `Microsoft.Compute`
+   - `Microsoft.Storage`
+   - `Microsoft.Network`
+2. **Create a resource group** named `watercooler-rg`.
+
+---
+
+## Step 1 — Create the VM  🔑 *Admin*
+
+> 🙋 **Your part first:** before the Admin starts, generate an SSH key on your Mac so you can log in later, and send the Admin the *public* half. In your Mac Terminal:
+> ```bash
+> ssh-keygen -t ed25519 -C "watercooler" -f ~/.ssh/watercooler_vm
+> # press Enter through the prompts, then:
+> cat ~/.ssh/watercooler_vm.pub
+> ```
+> Copy that output line and send it to the Admin. The private key stays on your machine.
+
+In the Azure Portal, go to **Virtual Machines → Create → Azure virtual machine**, and use these values on the **Basics** tab:
+
+| Field | Value | Notes |
+|---|---|---|
+| Subscription | *(the approved subscription)* | |
+| Resource group | `watercooler-rg` | from Step 0 |
+| Virtual machine name | `watercooler-vm` | |
+| Region | East US | or closest to the team |
+| Availability options | **No infrastructure redundancy required** | single small VM |
+| Security type | Trusted launch virtual machines | default is fine |
+| Image | **Ubuntu Server 24.04 LTS – x64 Gen2** | |
+| VM architecture | x64 | |
+| Run with Azure Spot discount | **No / unchecked** | Spot VMs can be shut off — bad for always-on |
+| **Size** | **Standard_B1s** | ⚠️ change from the default `D2s_v3` (~$70/mo). B1s ≈ $8/mo and is plenty. B2s for headroom. |
+| Authentication type | SSH public key | |
+| Username | `azureuser` | |
+| SSH public key source | **Use existing public key** | paste the `.pub` line from "Your part first" above |
+| Public inbound ports | **Allow selected ports → SSH (22)** | the only port needed — the app makes outbound connections to Slack, nothing inbound |
+
+**Disks tab:** set **OS disk type → Standard SSD** (cheaper than the Premium SSD default; fine for this workload).
+
+**Networking / Management / Monitoring / Advanced / Tags tabs:** leave at defaults.
+
+Then **Review + Create → Create**.
+
+**When it's done, the Admin gives you two things:** the VM's **public IP address** and confirmation it's running. That's the handoff point — everything below is yours.
+
+---
+
+## Step 2 — Connect and Install Node.js  🙋 *You*
+
+SSH into the VM using the key you generated in Step 1:
+```bash
+ssh -i ~/.ssh/watercooler_vm azureuser@<your-vm-ip>
+```
+
+Install Node.js 24 (required — the app uses Node's built-in SQLite module added in Node 22+):
+```bash
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node --version   # should show v24.x.x
+```
 
 SSH into the VM:
 ```bash
@@ -66,7 +128,7 @@ node --version   # should show v24.x.x
 
 ---
 
-## Step 3 — Copy the App Code
+## Step 3 — Copy the App Code  🙋 *You*
 
 **Option A — From GitHub (recommended)**
 
@@ -92,7 +154,7 @@ npm install
 
 ---
 
-## Step 4 — Migrate the Database
+## Step 4 — Migrate the Database  🙋 *You*
 
 The existing database holds all participant records, match history, and settings. Copy it to the VM so nothing is lost.
 
@@ -110,7 +172,7 @@ If you are starting fresh (no existing data to migrate), skip this step — the 
 
 ---
 
-## Step 5 — Set Environment Variables
+## Step 5 — Set Environment Variables  🙋 *You*
 
 Create the `.env` file on the VM. **Do not copy your local `.env` directly** — update `SCHEDULING_ENABLED` and `DATABASE_PATH` to their correct production values.
 
@@ -130,13 +192,17 @@ SLACK_APP_TOKEN=xapp-...
 PORT=3000
 ADMIN_USER_IDS=U01ABC123,U02DEF456
 
-# Database — absolute path is safest on a server
+# Database — just a file path on the VM's disk (NOT a connection string).
+# SQLite creates this file automatically on first start.
 DATABASE_PATH=/home/azureuser/watercooler/data/watercooler.db
 
 # Scheduler — set to true so rounds run automatically
 SCHEDULING_ENABLED=true
 
-# Calendar (Outlook integration)
+# Calendar (Outlook integration) — OPTIONAL.
+# Leave these out entirely and the app still runs; you just won't get
+# calendar slot suggestions or Teams links. Add later once IT completes
+# the Azure AD app registration (see docs/OUTLOOK_INTEGRATION.md).
 AZURE_TENANT_ID=...
 AZURE_CLIENT_ID=...
 AZURE_CLIENT_SECRET=...
@@ -147,12 +213,14 @@ CALENDAR_TIMEZONE=America/New_York
 > **Key differences from your local `.env`:**
 > - `SCHEDULING_ENABLED=true` — on your laptop this was probably `false`; on the server it should be `true`
 > - `DATABASE_PATH` — use an absolute path to avoid issues with the working directory
+>
+> **Note:** there is no database username, password, or connection string. The "database" is the single SQLite file at `DATABASE_PATH`. If anyone set up an Azure SQL database, it is not used here.
 
 Save and close (`Ctrl+X`, then `Y`, then `Enter`).
 
 ---
 
-## Step 6 — Test That It Starts
+## Step 6 — Test That It Starts  🙋 *You*
 
 Before setting up permanent background running, verify the app starts cleanly:
 
@@ -181,7 +249,7 @@ Press `Ctrl+C` to stop it — you'll start it properly in the next step.
 
 ---
 
-## Step 7 — Run as a Background Service (PM2)
+## Step 7 — Run as a Background Service (PM2)  🙋 *You*
 
 PM2 keeps the app running after you close your SSH session and restarts it automatically if the server reboots.
 
@@ -212,7 +280,7 @@ pm2 stop watercooler        # stop the app
 
 ---
 
-## Step 8 — Verify the Scheduler
+## Step 8 — Verify the Scheduler  🙋 *You*
 
 Since `SCHEDULING_ENABLED=true` on the server, the scheduler is now live. Confirm it's working:
 
@@ -232,7 +300,7 @@ And on the configured intro day/time:
 
 ---
 
-## Step 9 — Database Backups
+## Step 9 — Database Backups  🙋 *You*
 
 SQLite is a single file. Set up a daily backup cron job so you can recover if anything goes wrong.
 
@@ -323,6 +391,18 @@ pm2 start watercooler   # brings it back
 | Database missing after redeploy | `data/` folder was overwritten | Restore from backup; never copy `data/` during deploys |
 | `missing_scope` in logs | Slack bot token doesn't have a required scope | Add scope at api.slack.com → reinstall app |
 | App offline after VM reboot | PM2 startup not configured | Run `pm2 startup` and follow the printed command |
+
+---
+
+## Cleanup — Remove Unused Resources  🔑 *Admin*
+
+If an earlier attempt created an **Azure App Service** (a `*.azurewebsites.net` web app) or an **Azure SQL database**, neither is used by this app once it's running on the VM. Leaving them around just adds to the monthly bill.
+
+Once the VM has been running cleanly for a few days, the Admin can delete:
+- The App Service / App Service Plan
+- The Azure SQL database and its server
+
+The simplest way is to delete the **resource group** they live in — but only if it contains *just* those unused resources. If they share a resource group with the VM, delete them individually instead.
 
 ---
 
