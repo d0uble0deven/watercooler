@@ -102,24 +102,37 @@ Then **Review + Create → Create**.
 
 ## Step 2 — Connect and Install Node.js  🙋 *You*
 
-SSH into the VM using the key you generated in Step 1:
+### Accessing the VM
+
+You do **not** need Azure portal admin rights to use the VM. Managing it — connecting, installing software, deploying the app — is the maintainer's job, done entirely over SSH. All you need is two things the Admin already gave you:
+
+- The VM's **public IP address** (e.g. `20.119.52.118`)
+- Your **SSH private key** (`~/.ssh/watercooler_vm`, created in Step 1)
+
+> 💡 You can optionally view the VM in the Azure Portal (to find its IP, restart it, or check it's running) if the Admin grants you **Reader** or **Virtual Machine Contributor** access — but you don't need the portal at all to run the app. SSH is enough.
+
+### Connect
+
+From your Mac's Terminal:
 ```bash
 ssh -i ~/.ssh/watercooler_vm azureuser@<your-vm-ip>
 ```
 
-Install Node.js 24 (required — the app uses Node's built-in SQLite module added in Node 22+):
-```bash
-curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-sudo apt-get install -y nodejs
-node --version   # should show v24.x.x
+**On the very first connection** you'll see a prompt like:
 ```
-
-SSH into the VM:
-```bash
-ssh azureuser@<your-vm-ip>
+The authenticity of host '<ip>' can't be established.
+ED25519 key fingerprint is SHA256:...
+Are you sure you want to continue connecting (yes/no/[fingerprint])?
 ```
+That's normal. Type **`yes`** and press Enter.
 
-Install Node.js 24 (required — the app uses Node's built-in SQLite module added in Node 22+):
+**You're connected** when your prompt changes to something like `azureuser@watercooler-vm:~$` — at that point you're working *on the VM*, not your Mac.
+
+> If you instead see `Permission denied (publickey)`, you forgot the `-i ~/.ssh/watercooler_vm` flag, or the public key wasn't installed on the VM. Re-check the command includes `-i`.
+
+### Install Node.js 24
+
+Once connected (you see the `azureuser@...` prompt), run these — required because the app uses Node's built-in SQLite module (added in Node 22+):
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
@@ -130,45 +143,46 @@ node --version   # should show v24.x.x
 
 ## Step 3 — Copy the App Code  🙋 *You*
 
-**Option A — From GitHub (recommended)**
+**These commands run *on the VM*** (you should see the `azureuser@...` prompt). Pull the latest code straight from GitHub — cleaner than copying from your laptop, because it skips `node_modules`, your local `.env`, and your dev database.
 
-If the code is in a GitHub repository:
 ```bash
-git clone https://github.com/your-org/watercooler.git
+sudo apt-get install -y git
+git clone https://github.com/d0uble0deven/watercooler.git
 cd watercooler
 npm install
 ```
 
-**Option B — Direct file copy from local machine**
+**Success looks like:** `git clone` prints "Cloning into 'watercooler'..." and `npm install` ends with "added N packages" and no red error lines.
 
-From your local machine (not the VM):
-```bash
-scp -r /path/to/watercooler azureuser@<your-vm-ip>:~/watercooler
-```
+> **Make sure your local changes are pushed first.** `git clone` pulls whatever is on GitHub's `main` branch. Before deploying, run `git status` and `git push` on your Mac so the VM gets your latest code.
+>
+> **If `git clone` asks for a username/password** or says "repository not found," the repo is private. Either make it public, or set up a [GitHub deploy key / personal access token](https://docs.github.com/en/authentication) on the VM.
 
-Then on the VM:
+<details>
+<summary>Fallback: copy from your laptop instead of GitHub</summary>
+
+Only if you can't use GitHub. From your **Mac** (not the VM), and note the `-i` key flag:
 ```bash
-cd ~/watercooler
-npm install
+scp -i ~/.ssh/watercooler_vm -r ~/CodeBases/DocMe360/watercooler azureuser@<your-vm-ip>:~/watercooler
 ```
+This drags along `node_modules`, `.env`, and your dev database — you'll want to delete those on the VM and create a fresh `.env` in Step 5. Then `cd ~/watercooler && npm install`.
+</details>
 
 ---
 
-## Step 4 — Migrate the Database  🙋 *You*
+## Step 4 — Database  🙋 *You*
 
-The existing database holds all participant records, match history, and settings. Copy it to the VM so nothing is lost.
+**Starting fresh? Skip this step entirely.** The app creates the SQLite database file automatically the first time it starts — there's nothing to set up.
 
-From your local machine:
+<details>
+<summary>Only if migrating an existing production database</summary>
+
+To carry over participant records and match history from another server, copy the file from your Mac (note the `-i` key flag):
 ```bash
-scp /path/to/watercooler/data/watercooler.db azureuser@<your-vm-ip>:~/watercooler/data/watercooler.db
+ssh -i ~/.ssh/watercooler_vm azureuser@<your-vm-ip> 'mkdir -p ~/watercooler/data'
+scp -i ~/.ssh/watercooler_vm /path/to/watercooler.db azureuser@<your-vm-ip>:~/watercooler/data/watercooler.db
 ```
-
-> ⚠️ Make sure the `data/` directory exists on the VM first:
-> ```bash
-> mkdir -p ~/watercooler/data
-> ```
-
-If you are starting fresh (no existing data to migrate), skip this step — the app will create a new database automatically on first start.
+</details>
 
 ---
 
