@@ -318,21 +318,21 @@ And on the configured intro day/time:
 
 SQLite is a single file. Set up a daily backup cron job so you can recover if anything goes wrong.
 
-```bash
-crontab -e
-```
+The most reliable way (no editor, avoids paste errors) — run this whole block once. It creates the backups folder and installs the job in one go:
 
-Add this line (backs up every night at 2 AM, keeps 30 days of history):
-```bash
-0 2 * * * cp /home/azureuser/watercooler/data/watercooler.db \
-  /home/azureuser/watercooler/data/backups/watercooler-$(date +\%Y\%m\%d).db \
-  2>/dev/null; find /home/azureuser/watercooler/data/backups -name 'watercooler-*.db' -mtime +30 -delete
-```
-
-Create the backups folder first:
 ```bash
 mkdir -p ~/watercooler/data/backups
+( crontab -l 2>/dev/null; echo '0 2 * * * cp /home/azureuser/watercooler/data/watercooler.db /home/azureuser/watercooler/data/backups/watercooler-$(date +\%Y\%m\%d).db 2>/dev/null; find /home/azureuser/watercooler/data/backups -name "watercooler-*.db" -mtime +120 -delete' ) | crontab -
 ```
+
+This backs up every night at 2 AM and keeps **120 days** of history. Confirm it installed:
+```bash
+crontab -l
+```
+
+> ⚠️ **A cron job must be a single line** — crontab does not accept the `\` line-continuation that normal shells do. If you edit it by hand with `crontab -e`, keep the entire `0 2 * * * ...` command on one unbroken line, or you'll get a `bad minute` error.
+>
+> **Retention:** the `-mtime +120` near the end is the number of days to keep. Change `+120` to `+30`, `+365`, etc. to adjust.
 
 **To restore from a backup:**
 ```bash
