@@ -49,7 +49,8 @@ See [docs/PRODUCTION.md](docs/PRODUCTION.md) for the full step-by-step guide, in
 Short version:
 1. Create a Slack app at https://api.slack.com/apps
 2. Enable Socket Mode → generate an App-Level Token (`xapp-...`)
-3. Add bot scopes: `commands`, `chat:write`, `im:write`, `mpim:write`, `users:read`, `users:read.email`
+3. Add bot scopes: `commands`, `chat:write`, `im:write`, `mpim:write`, `users:read`, `users:read.email`, `channels:read` (last one only needed for channel-based enrollment)
+   - For channel-based enrollment also subscribe to bot events `member_joined_channel` and `member_left_channel` (Event Subscriptions — works over Socket Mode, no Request URL)
 4. Install to workspace → copy Bot Token (`xoxb-...`)
 5. Copy Signing Secret from Basic Information
 6. Fill in `.env` with all three tokens + `ADMIN_USER_IDS`
@@ -96,11 +97,13 @@ Short version:
 | `/watercooler admin set group-size <n>` | Set pair/group size (must be ≥ 2) |
 | `/watercooler admin set cadence weekly\|biweekly\|triweekly\|monthly` | Set matching frequency |
 | `/watercooler admin set avoid-repeat-rounds <n>` | Repeat-avoidance window (0 = off) |
-| `/watercooler admin set channel <channel-id>` | Channel for round-complete announcements |
+| `/watercooler admin set channel <channel-id>` | Channel for announcements + channel-based enrollment |
+| `/watercooler admin set enrollment manual\|channel` | How people join: slash command only, or joining the intro channel |
 | `/watercooler admin exclude @user` | Prevent a user from being matched |
 | `/watercooler admin include @user` | Lift an exclusion |
 | `/watercooler admin refresh-names` | Re-fetch display names from Slack profiles |
 | `/watercooler admin calendar-status` | Check Microsoft Graph connection |
+| `/watercooler admin sync-channel` | Backfill: enroll everyone already in the intro channel (channel mode) |
 
 #### Workflow recovery
 
@@ -145,6 +148,7 @@ Short version:
 | `npm run test:tz-intersection` | Timezone intersection tests (47 tests) |
 | `npm run test:admin-commands` | Admin workflow command tests (40 tests) |
 | `npm run test:reschedule` | Reschedule flow tests (21 tests) |
+| `npm run test:enrollment` | Channel-enrollment tests (38 tests) |
 | `npm run test:all` | Run all test suites in sequence |
 
 ---
@@ -162,9 +166,10 @@ src/
                         summary, participants, paused, show-settings, recent-rounds,
                         set, exclusions, calendar-status, refresh-names,
                         list-matches, force-book, send-completion,
-                        resend-suggestions, cancel-round
+                        resend-suggestions, cancel-round, sync-channel
     actions/          — bookSlot (slot button handler), meetingFeedback,
                         reschedule (reschedule button handler)
+    events/           — channelMembership (member_joined/left_channel handlers)
   integrations/
     msGraph.js        — Microsoft Graph client (app-only auth via Azure AD)
     calendarReader.js — free/busy queries via Graph API
@@ -183,6 +188,7 @@ src/
     init.js           — CREATE TABLE IF NOT EXISTS + ALTER TABLE migrations
   lib/
     users.js          — user + exclusion DB helpers, email + timezone cache
+    enrollment.js     — shared enroll/unenroll logic + welcome DM (channel enrollment)
     rounds.js         — round, match, booking, pair history, settings DB helpers
     slotFinder.js     — free-slot algorithm with prime-hours preference
     retryHelper.js    — exponential backoff wrapper for Graph API calls

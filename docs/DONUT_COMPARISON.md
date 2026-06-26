@@ -29,13 +29,13 @@ A breakdown of what our custom Watercooler app covers today vs. the full feature
 
 | Feature | Donut | Watercooler |
 |---|---|---|
-| Opt in to matching | ✅ Join channel | ✅ `/watercooler join` |
+| Opt in to matching | ✅ Join channel | ✅ `/watercooler join` **or** join the intro channel (channel enrollment mode) |
 | Opt out of matching | ✅ Leave channel | ✅ `/watercooler leave` |
 | Pause / skip rounds | ✅ Snooze up to 4 rounds | 🟡 Pause is indefinite — no automatic round-count limit |
 | Resume after pause | ✅ | ✅ `/watercooler resume` |
 | Check own status | ✅ | ✅ `/watercooler status` |
 | Snooze for a specific number of rounds | ✅ 1–4 rounds | ❌ Not built |
-| Stay in channel but opt out of matching | ✅ Lurk mode | ❌ Not built |
+| Stay in channel but opt out of matching | ✅ Lurk mode | 🟡 Possible via `/watercooler leave` while staying in channel, but a channel sync re-enrolls; `pause` is more durable |
 | "Do not pair" with a specific person | ✅ | ❌ Not built |
 | User profile / Favorite Things | ✅ | ❌ Not built |
 
@@ -50,6 +50,7 @@ A breakdown of what our custom Watercooler app covers today vs. the full feature
 | View paused users | ✅ | ✅ `/watercooler admin paused` |
 | Exclude a specific user | ✅ | ✅ `/watercooler admin exclude @user` |
 | Lift an exclusion | ✅ | ✅ `/watercooler admin include @user` |
+| Channel-membership = enrollment | ✅ | ✅ `set enrollment channel` + `sync-channel` backfill |
 | View current settings | ✅ | ✅ `/watercooler admin settings` |
 | Update settings | ✅ Web dashboard | 🟡 Slack commands only — no web dashboard |
 | View round history | ✅ Dashboard + CSV | 🟡 Recent rounds via Slack command only |
@@ -147,7 +148,8 @@ The gaps vs. Donut fall into three tiers of priority:
 
 | Gap | Notes |
 |---|---|
-| **Auto-enroll new hires (opt-out by default)** | Listen for Slack's `team_join` event, auto-create the user as active, send a welcome DM explaining the program and how to leave. Matches how Donut works — higher participation without requiring action from new employees. |
+| ~~Channel-based auto-enrollment~~ | ✅ **Done.** Joining the intro channel enrolls you (welcome DM); leaving opts you out. `set enrollment channel` toggle + `sync-channel` backfill. See `docs/CHANNEL_ENROLLMENT_PLAN.md`. |
+| Auto-enroll *new hires* on join | Remaining piece: listen for Slack's `team_join` event so brand-new employees are added before they've even joined any channel. Channel enrollment already covers everyone who joins `#virtual-coffee`. |
 | ~~Outlook calendar integration + Teams auto-booking~~ | ✅ **Done.** Free/busy queries, slot suggestions with clickable buttons, auto-booking, Teams links, reschedule flow, per-user timezone awareness. See `docs/OUTLOOK_INTEGRATION.md`. |
 | Participation rate tracking | Track whether matched users confirm they met — feedback buttons capture responses but no summary/dashboard yet |
 | CSV export of match history | Query the SQLite DB and format as CSV |

@@ -10,11 +10,21 @@ All commands start with `/watercooler` typed in any Slack message field.
 
 ### Joining
 
+There are two ways to join, depending on how your workspace is set up:
+
+**Option 1 — Join the channel** *(if channel enrollment is on)*
+
+Just join `#virtual-coffee`. You're automatically enrolled and get a welcome DM. This is the easiest way — no commands to remember.
+
+**Option 2 — Slash command**
+
 ```
 /watercooler join
 ```
 
-Opts you in to matching. You'll be included starting with the next round. If you've left before, this re-activates your account.
+Opts you in to matching. You'll be included starting with the next round. If you've left before, this re-activates your account. This always works, regardless of how enrollment is configured.
+
+> **Already in the channel but want to stop being matched (lurk mode)?** Run `/watercooler leave` while staying in `#virtual-coffee` — you keep seeing the channel but won't be paired. Note: if an admin runs a channel sync, you may be re-enrolled, so `/watercooler pause` is the more durable way to sit out.
 
 ---
 
@@ -58,6 +68,8 @@ Puts you back in the queue. You'll be included in the next round that runs.
 ```
 
 Opts you out entirely. You won't receive any further intros or messages. You can rejoin at any time with `/watercooler join`.
+
+If channel enrollment is on, **leaving `#virtual-coffee` also opts you out** — same effect as this command.
 
 ---
 
@@ -205,6 +217,19 @@ Watercooler avoids re-matching the same two people within the last `n` rounds. D
 
 Sets the Slack channel where round-complete summaries are posted (e.g. `#virtual-coffee`). Use the channel's ID (found in channel settings), not its name.
 
+#### Enrollment mode
+
+```
+/watercooler admin set enrollment manual|channel
+```
+
+Controls how people join Watercooler:
+
+- **`manual`** (default) — people join only via `/watercooler join`.
+- **`channel`** — joining the intro channel (`#virtual-coffee`) automatically enrolls people and sends them a welcome DM; leaving the channel opts them out.
+
+Channel mode requires an intro channel to be set first (above), and the bot must be a member of that channel. After turning it on, run `sync-channel` (below) once to enroll everyone already in the channel.
+
 ---
 
 ### Managing Participants
@@ -232,6 +257,16 @@ Removes a previous exclusion. The user can then join normally with `/watercooler
 ```
 
 Re-fetches every participant's real name from their Slack profile and updates the DB. Run this if names look wrong in match intros or summaries.
+
+#### Sync the channel (enrollment backfill)
+
+```
+/watercooler admin sync-channel
+```
+
+Only used in **channel** enrollment mode. Channel join/leave events only catch *future* changes, so this is a one-time backfill that enrolls everyone **already** sitting in `#virtual-coffee`. Run it once right after switching to channel mode.
+
+It reports a summary (enrolled / reactivated / already active / skipped) and a **drift list** — anyone active in the system who is *not* in the channel (e.g. people who joined by command earlier). It only reports drift; it never removes anyone. Safe to run repeatedly.
 
 ---
 

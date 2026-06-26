@@ -1,5 +1,7 @@
 # Channel-Based Auto-Enrollment — Implementation Plan
 
+> **Status: ✅ Implemented** (Steps 0–6 complete). This doc is kept as the design record; the feature ships behind `enrollment_mode` (default `manual`). Turn it on with `/watercooler admin set enrollment channel`, then run `/watercooler admin sync-channel` once.
+
 > **Goal:** Joining `#virtual-coffee` enrolls you in Watercooler. Leaving the channel opts you out. Slash commands remain as overrides. The all-hands pitch becomes: *"Join #virtual-coffee and you're in."*
 
 ## Decided Behavior
