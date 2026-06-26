@@ -28,6 +28,7 @@ const { forceBook }      = require("./force-book");
 const { sendCompletion }    = require("./send-completion");
 const { resendSuggestions } = require("./resend-suggestions");
 const { cancelRound }       = require("./cancel-round");
+const { syncChannel }       = require("./sync-channel");
 
 const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin dry-run\` — preview matches without sending DMs
@@ -50,7 +51,8 @@ const ADMIN_HELP = `*Watercooler admin commands:*
 • \`/watercooler admin force-book [matchId]\` — auto-book one match or all unbooked matches now
 • \`/watercooler admin send-completion [matchId]\` — send feedback message for one or all qualifying matches
 • \`/watercooler admin resend-suggestions <matchId>\` — re-post calendar slot buttons for a match
-• \`/watercooler admin cancel-round [roundId]\` — cancel a round and notify all affected DMs`;
+• \`/watercooler admin cancel-round [roundId]\` — cancel a round and notify all affected DMs
+• \`/watercooler admin sync-channel\` — enroll everyone already in the intro channel (channel-enrollment backfill)`;
 
 // `client` is Bolt's Web API client — only needed by commands that call Slack
 // (currently just `run`). Read-only commands don't use it.
@@ -126,6 +128,9 @@ async function handleAdmin(command, text, respond, client) {
 
       case "cancel-round":
         return await cancelRound(command, args, respond, client);
+
+      case "sync-channel":
+        return await syncChannel(command, respond, client);
 
       default:
         return await respond(ADMIN_HELP);
