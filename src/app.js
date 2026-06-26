@@ -95,6 +95,13 @@ async function start() {
   app.action('watercooler_meeting_meh',    handleMeetingMeh);
   app.action('watercooler_meeting_snooze', handleMeetingSnooze);
 
+  // Channel-based auto-enrollment — only acts when enrollment_mode is 'channel'
+  // and the event is for the configured intro channel (guards live in the handler).
+  const { handleMemberJoinedChannel, handleMemberLeftChannel } =
+    require('./commands/events/channelMembership');
+  app.event('member_joined_channel', handleMemberJoinedChannel);
+  app.event('member_left_channel',   handleMemberLeftChannel);
+
   await app.start();
   console.log('⚡️ Slack Bolt connected via Socket Mode\n');
 
