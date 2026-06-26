@@ -18,16 +18,67 @@
 
 ## Step 0 — Slack App Configuration (manual, no code)
 
-One-time changes in the Slack app dashboard (api.slack.com/apps):
+All of this happens in the Slack app dashboard at **https://api.slack.com/apps** → click your **Watercooler** app. No code or terminal needed. Takes about 5 minutes.
 
-1. **Add bot scope:** `channels:read` — needed for `conversations.members` (backfill) and channel membership checks
-2. **Subscribe to bot events:** `member_joined_channel`, `member_left_channel` (Event Subscriptions → works over Socket Mode, no public URL needed)
-3. **Reinstall the app** to the workspace (scope changes require reinstall)
-4. **Confirm the bot is a member of `#virtual-coffee`** (it must be in the channel to receive its membership events)
+### 0a — Add the `channels:read` bot scope
 
-> ⚠️ `#virtual-coffee` must be a **public** channel. If it were ever made private, the scope changes to `groups:read` and the events still require bot membership.
+This scope lets the bot list a channel's members (for the one-time backfill in Step 4) and confirm channel membership.
 
-**Verify:** restart the app, join/leave a throwaway channel the bot is in, and watch the event payloads arrive in the logs (add a temporary `console.log` if needed).
+1. In the left sidebar, click **OAuth & Permissions**.
+2. Scroll down to **Scopes → Bot Token Scopes**.
+3. Click **Add an OAuth Scope**.
+4. Type and select **`channels:read`**.
+
+> You'll see a yellow banner at the top saying the app needs to be reinstalled — that's expected. Do it in step 0c, after adding the events, so you only reinstall once.
+
+### 0b — Subscribe to the two channel events
+
+These are what tell the app when someone joins or leaves the channel.
+
+1. In the left sidebar, click **Event Subscriptions**.
+2. Make sure the **Enable Events** toggle at the top is **On**.
+   - Because the app runs in **Socket Mode**, there is **no Request URL to fill in** — the field is hidden or marked as handled by Socket Mode. (If it's demanding a Request URL, Socket Mode isn't enabled — but it already is, since your slash commands work.)
+3. Expand the **Subscribe to bot events** section (not "workspace events").
+4. Click **Add Bot User Event** and add each of these:
+   - **`member_joined_channel`**
+   - **`member_left_channel`**
+5. Click **Save Changes** (green button, bottom-right). Easy to miss — the events won't take effect without it.
+
+### 0c — Reinstall the app
+
+Adding a scope requires a reinstall to take effect.
+
+1. Go back to **OAuth & Permissions** (or click the yellow "reinstall" banner if it's showing).
+2. Click **Reinstall to Workspace** → review the permissions → **Allow**.
+
+> ✅ **Your `.env` does not change.** Reinstalling to the same workspace keeps the same bot token (`xoxb-...`), so there's nothing to update on the VM. (If you ever *rotate* the token deliberately, that's the only time you'd update `.env` and restart the app.)
+
+### 0d — Make sure the bot is in `#virtual-coffee`
+
+**This is the easy-to-forget one.** Slack only sends `member_joined_channel` / `member_left_channel` events for a channel **the bot itself is a member of**. If the bot isn't in `#virtual-coffee`, it will never hear about anyone joining.
+
+In Slack, go to `#virtual-coffee` and type:
+```
+/invite @Watercooler
+```
+(If it's already in the channel — which it likely is, since it posts round summaries there — Slack will just say it's already a member. No harm.)
+
+> ⚠️ `#virtual-coffee` must be a **public** channel for `channels:read`. If it's ever made private, you'd swap the scope to `groups:read` — but the bot-membership requirement is the same either way.
+
+### "It's the same channel as the intro channel — do I need anything extra?"
+
+**No new settings, and that's by design.** The enrollment feature reuses the existing **intro channel** setting (`intro_channel_id`) — the same `#virtual-coffee` where round summaries already post. So:
+
+- ✅ **Nothing to configure twice** — one channel does both jobs (announcements + enrollment).
+- ✅ **No new "enrollment channel" setting** — Step 3's code checks incoming events against `intro_channel_id`.
+
+The only two things that must be true (both covered above):
+1. `intro_channel_id` is actually set — confirm with `/watercooler admin settings`; if blank, run `/watercooler admin set channel <channel-id>`.
+2. The bot is a member of that channel (step 0d).
+
+### Verify Step 0 worked
+
+The events won't *do* anything until the code in Steps 1–3 is built — but you can confirm Slack is delivering them now. With the app running, watch the logs (`pm2 logs watercooler`), then have someone join `#virtual-coffee`. Temporarily add a one-line `app.event('member_joined_channel', ...)` logger, or just trust the dashboard: if both events show under **Event Subscriptions → Subscribe to bot events** and **Save Changes** was clicked, delivery is wired up.
 
 ---
 

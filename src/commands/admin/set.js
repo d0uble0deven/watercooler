@@ -15,7 +15,7 @@
 //   set calendar-timezone <tz>      — IANA timezone for meeting time display (e.g. America/Chicago)
 //   set completion-fallback-days <n> — business days after round before fallback completion fires (default 12)
 
-const { updateSettings } = require('../../lib/rounds');
+const { updateSettings, getSettings } = require('../../lib/rounds');
 
 const SET_HELP = [
   '*Available settings:*',
@@ -32,6 +32,9 @@ const SET_HELP = [
   '• `/watercooler admin set booking-deadline <days>` — days before intro to auto-book (e.g. `2.5`)',
   '• `/watercooler admin set calendar-timezone <tz>` — IANA timezone for meeting time display (e.g. `America/Chicago`)',
   '• `/watercooler admin set completion-fallback-days <n>` — business days after round before fallback fires (default `12`)',
+  '',
+  '*Enrollment:*',
+  '• `/watercooler admin set enrollment manual|channel` — how people join (manual = slash command only; channel = joining the intro channel enrolls them)',
 ].join('\n');
 
 async function set(command, args, respond) {
@@ -51,6 +54,7 @@ async function set(command, args, respond) {
     case 'booking-deadline':    return await setBookingDeadline(value, respond);
     case 'calendar-timezone':        return await setCalendarTimezone(value, respond);
     case 'completion-fallback-days': return await setCompletionFallbackDays(value, respond);
+    case 'enrollment':               return await setEnrollment(value, respond);
     default:
       return await respond(
         `❌ Unknown setting: \`${setting || '(none)'}\`\n\n${SET_HELP}`
@@ -235,6 +239,36 @@ async function setCompletionFallbackDays(value, respond) {
     `✅ Completion fallback updated to *${n} business day${n === 1 ? '' : 's'}*.\n` +
     '_Matches with no calendar booking will receive the post-meeting message after this many business days._'
   );
+}
+
+// ── Enrollment settings ───────────────────────────────────────────────────────
+
+async function setEnrollment(value, respond) {
+  const normalised = (value || '').toLowerCase().trim();
+  if (normalised !== 'manual' && normalised !== 'channel') {
+    await respond(
+      '❌ `enrollment` must be `manual` or `channel`.\n' +
+      '• `manual` — people join only via `/watercooler join`\n' +
+      '• `channel` — joining the intro channel enrolls them automatically\n' +
+      'Example: `/watercooler admin set enrollment channel`'
+    );
+    return;
+  }
+
+  // Channel mode is meaningless without a channel to watch — block it.
+  if (normalised === 'channel' && !getSettings().intro_channel_id) {
+    await respond(
+      '❌ Can\'t enable channel enrollment — no intro channel is set.\n' +
+      'Set one first: `/watercooler admin set channel <channel-id>`, then re-run this.'
+    );
+    return;
+  }
+
+  updateSettings({ enrollment_mode: normalised });
+  const msg = normalised === 'channel'
+    ? '✅ Enrollment mode set to *channel*. Joining the intro channel now enrolls people automatically; leaving opts them out.'
+    : '✅ Enrollment mode set to *manual*. People join only via `/watercooler join` — channel join/leave events are ignored.';
+  await respond(msg);
 }
 
 module.exports = set;

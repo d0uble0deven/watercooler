@@ -14,6 +14,7 @@ async function showSettings(command, respond) {
   const deadlineHours  = Math.floor(dl) * 24 + (dl % 1) * 8;
   const tz             = s.calendar_timezone ?? 'America/New_York';
   const fallbackDays   = s.completion_fallback_days ?? 12;
+  const enrollment     = s.enrollment_mode ?? 'manual';
 
   await respond([
     '*⚙️ Watercooler Settings*',
@@ -24,6 +25,7 @@ async function showSettings(command, respond) {
     `• Intro day:             *${s.intro_day}*`,
     `• Intro time:            *${s.intro_time}*`,
     `• Intro channel:         ${channel}`,
+    `• Enrollment mode:       *${enrollment}* ${enrollment === 'channel' ? '_(joining the intro channel enrolls people)_' : '_(slash command only)_'}`,
     '',
     '*📅 Calendar (Outlook integration):*',
     `• Calendar integration:  ${calEnabled}`,
@@ -42,6 +44,7 @@ async function showSettings(command, respond) {
     '• `/watercooler admin set booking-deadline <days>`',
     '• `/watercooler admin set calendar-timezone <iana-tz>`',
     '• `/watercooler admin set completion-fallback-days <n>`',
+    '• `/watercooler admin set enrollment manual|channel`',
   ].join('\n'));
 }
 

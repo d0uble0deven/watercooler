@@ -127,6 +127,9 @@ const MIGRATIONS = [
   `ALTER TABLE rounds   ADD COLUMN summary_sent             INTEGER NOT NULL DEFAULT 0`,
   // Reschedule flow — preserves old event ID until new slot is confirmed
   `ALTER TABLE matches  ADD COLUMN previous_event_id        TEXT`,
+  // Channel-based auto-enrollment — toggle + how each user was enrolled
+  `ALTER TABLE settings ADD COLUMN enrollment_mode          TEXT NOT NULL DEFAULT 'manual'`,
+  `ALTER TABLE users    ADD COLUMN enrolled_via             TEXT`,
 ];
 
 function runMigrations(db) {
