@@ -365,6 +365,26 @@ function getMatchesForRound(roundId) {
 }
 
 /**
+ * Returns the fun facts already assigned to matches in a round, so the picker
+ * can avoid repeating one within the same round.
+ */
+function getUsedFunFactsForRound(roundId) {
+  return getDb()
+    .prepare(`SELECT fun_fact FROM matches WHERE round_id = ? AND fun_fact IS NOT NULL`)
+    .all(roundId)
+    .map((r) => r.fun_fact);
+}
+
+/**
+ * Stores the conversation-starter fun fact chosen for a match's calendar invite.
+ */
+function saveFunFact(matchId, fact) {
+  getDb()
+    .prepare(`UPDATE matches SET fun_fact = ? WHERE id = ?`)
+    .run(fact, matchId);
+}
+
+/**
  * Marks a round as cancelled. Safe to call on any status.
  */
 function markRoundCancelled(roundId) {
@@ -654,6 +674,8 @@ module.exports = {
   getRoundById,
   getMostRecentActiveRound,
   getMatchesForRound,
+  getUsedFunFactsForRound,
+  saveFunFact,
   markRoundCancelled,
   getAllUnbookedMatches,
   getAllMatchesPendingCompletion,

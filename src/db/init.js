@@ -130,6 +130,8 @@ const MIGRATIONS = [
   // Channel-based auto-enrollment — toggle + how each user was enrolled
   `ALTER TABLE settings ADD COLUMN enrollment_mode          TEXT NOT NULL DEFAULT 'manual'`,
   `ALTER TABLE users    ADD COLUMN enrolled_via             TEXT`,
+  // Fun fact included in each match's calendar invite (conversation starter)
+  `ALTER TABLE matches  ADD COLUMN fun_fact                 TEXT`,
 ];
 
 function runMigrations(db) {
