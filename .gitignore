@@ -5,7 +5,9 @@
 node_modules/
 
 # SQLite database (local dev data only)
-data/
+# Leading slash anchors this to the project root so it does NOT also ignore
+# src/data/ (which holds version-controlled content like funFacts.js).
+/data/
 
 # macOS
 .DS_Store
