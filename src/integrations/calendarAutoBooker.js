@@ -22,6 +22,7 @@ const config               = require('../config');
 const { getGraphClient }   = require('./msGraph');
 const { getFreeBusy }      = require('./calendarReader');
 const { bookMeeting }      = require('./calendarBooker');
+const { assignFunFact }    = require('../lib/funFacts');
 const { buildSearchWindow, formatSlotLabel } = require('./calendarScheduler');
 const { findSlots }        = require('../lib/slotFinder');
 const { formatNameList }   = require('../slack/messaging');
@@ -86,8 +87,9 @@ async function autoBookMatch(client, graphClient, match, settings) {
     return;
   }
 
-  // Create the calendar event
-  const booking = await bookMeeting(graphClient, users, slots[0].start, slots[0].end);
+  // Create the calendar event, with a conversation-starter fact for the invite
+  const funFact = assignFunFact(match.id, match.round_id);
+  const booking = await bookMeeting(graphClient, users, slots[0].start, slots[0].end, funFact);
   saveBooking(match.id, { calendarEventId: booking.eventId, teamsLink: booking.teamsLink });
   saveMeetingTimes(match.id, slots[0].start, slots[0].end);
   console.log(`[calendarAutoBooker] Match ${match.id} auto-booked → event ${booking.eventId}`);

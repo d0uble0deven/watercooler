@@ -18,6 +18,7 @@ const config           = require('../../config');
 const { getGraphClient } = require('../../integrations/msGraph');
 const { bookMeeting, buildConfirmationMessage, buildAlreadyBookedMessage } = require('../../integrations/calendarBooker');
 const { getMatch, getMatchUsers, saveBooking, claimBooking, releaseBookingClaim, saveMeetingTimes, getSettings, clearPreviousEvent } = require('../../lib/rounds');
+const { assignFunFact } = require('../../lib/funFacts');
 
 /**
  * Bolt action handler — registered in app.js for action IDs matching
@@ -90,9 +91,12 @@ async function handleBookSlot({ action, ack, body, client }) {
   }
 
   // ── Create the meeting ─────────────────────────────────────────────────────
+  // Draw a conversation-starter fact for the invite, avoiding repeats in this round.
+  const funFact = assignFunFact(matchId, getMatch(matchId)?.round_id);
+
   let booking;
   try {
-    booking = await bookMeeting(graphClient, users, slotStart, slotEnd);
+    booking = await bookMeeting(graphClient, users, slotStart, slotEnd, funFact);
   } catch (err) {
     releaseBookingClaim(matchId); // let the user retry by clicking again
     console.error('[bookSlot] Graph API booking failed:', err.message);
