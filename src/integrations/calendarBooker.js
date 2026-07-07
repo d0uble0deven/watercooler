@@ -194,29 +194,40 @@ function buildAlreadyBookedMessage(teamsLink) {
  */
 function buildEventBodyHtml(users, funFact = null) {
   const names = formatNameList(users.map((u) => u.display_name));
+
+  // Outlook/Teams desktop strips default <p> margins (mobile keeps them), so
+  // spacing must be declared inline to render consistently on every surface.
+  const p = (content) => `<p style="margin:0 0 14px 0;">${content}</p>`;
+
   const contactLine = config.contactName
-    ? `<p>Questions, suggestions, or something broken? ` +
-      `Reach out to <strong>${config.contactName}</strong> on Slack.</p>`
+    ? p(
+        `Questions, suggestions, or something broken? ` +
+        `Reach out to <strong>${config.contactName}</strong> on Slack.`,
+      )
     : "";
 
   const funFactLine = funFact
-    ? `<p>☕ <strong>Conversation starter:</strong> ${escapeHtml(funFact)}</p>`
+    ? p(`☕ <strong>Conversation starter:</strong> ${escapeHtml(funFact)}`)
     : "";
 
   return [
-    "<p>Hi there! 👋</p>",
-    "<p>This meeting was set up by <strong>Watercooler</strong> — DocMe360's internal program ",
-    "for building connections across the team. Every few weeks, Watercooler pairs team members ",
-    "for a casual 15-minute virtual coffee, so you get to know people outside your usual Slack channels.</p>",
-    `<p>You\'re meeting with: <strong>${names}</strong></p>`,
-    "<p>Your booking confirmation and the original intro message are in your Slack group DM ",
-    "with your match partner — feel free to coordinate there if you need to reschedule.</p>",
-    "<p>Have a great chat! ☕</p>",
-    "<p>— The Watercooler bot</p>",
-    "<hr>",
-    contactLine,
+    p("Hi there! 👋"),
+    p(
+      "This meeting was set up by <strong>Watercooler</strong> — DocMe360's internal program " +
+      "for building connections across the team. Every few weeks, Watercooler pairs team members " +
+      "for a casual 15-minute virtual coffee, so you get to know people outside your usual Slack channels.",
+    ),
+    p(`You're meeting with: <strong>${names}</strong>`),
     funFactLine,
-    "<p><em>(Microsoft Teams meeting details below)</em></p>",
+    p(
+      "Your booking confirmation and the original intro message are in your Slack group DM " +
+      "with your match partner — feel free to coordinate there if you need to reschedule.",
+    ),
+    p("Have a great chat! ☕"),
+    p("— The Watercooler bot"),
+    '<hr style="margin:14px 0;">',
+    contactLine,
+    p("<em>(Microsoft Teams meeting details below)</em>"),
   ].join("");
 }
 
