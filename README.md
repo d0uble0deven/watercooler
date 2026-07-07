@@ -8,6 +8,7 @@ Internal Slack app for casual 1:1 social matching — similar to Donut, self-hos
 
 | Document | What it covers |
 |---|---|
+| [docs/GO_LIVE.md](docs/GO_LIVE.md) | Launch runbook — final end-to-end test in a test channel, then go live |
 | [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | End-user and admin guide — all Slack commands explained |
 | [docs/SLACK_CONCEPTS.md](docs/SLACK_CONCEPTS.md) | Plain-English guide to every Slack concept used in this app |
 | [docs/PRODUCTION.md](docs/PRODUCTION.md) | Step-by-step deployment guide — Slack setup, scopes, hosting, monitoring |
