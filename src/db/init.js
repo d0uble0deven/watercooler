@@ -29,7 +29,7 @@ const SCHEMA = `
     intro_channel_id    TEXT,                             -- Slack channel ID for announcements
     group_size          INTEGER NOT NULL DEFAULT 2,       -- 2 = pairs, 3 would be all trios
     avoid_repeat_rounds INTEGER NOT NULL DEFAULT 4,       -- avoid repeating a pair within N rounds
-    cadence             TEXT    NOT NULL DEFAULT 'weekly', -- 'weekly' | 'biweekly' | 'monthly'
+    cadence             TEXT    NOT NULL DEFAULT 'triweekly', -- 'weekly' | 'biweekly' | 'triweekly' | 'monthly'
     intro_day           TEXT    NOT NULL DEFAULT 'monday',
     intro_time          TEXT    NOT NULL DEFAULT '09:00',
     created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -102,8 +102,8 @@ const SCHEMA = `
 
 const MIGRATIONS = [
   // Phase 10 Step 2 — calendar settings
-  `ALTER TABLE settings ADD COLUMN calendar_enabled  INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE settings ADD COLUMN meeting_duration  INTEGER NOT NULL DEFAULT 30`,
+  `ALTER TABLE settings ADD COLUMN calendar_enabled  INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE settings ADD COLUMN meeting_duration  INTEGER NOT NULL DEFAULT 15`,
   `ALTER TABLE settings ADD COLUMN booking_deadline  REAL    NOT NULL DEFAULT 2.5`,
   // Phase 10 Step 5 — store Outlook email per user (populated on first match run)
   `ALTER TABLE users ADD COLUMN slack_email TEXT`,
@@ -162,7 +162,7 @@ function initDb() {
                             calendar_enabled, meeting_duration, booking_deadline, calendar_timezone,
                             completion_fallback_days)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(2, 4, 'weekly', 'monday', '09:00', 0, 30, 2.5, 'America/New_York', 12);
+    `).run(2, 4, 'triweekly', 'monday', '09:00', 1, 15, 2.5, 'America/New_York', 12);
     console.log('  → Default settings row created');
   }
 

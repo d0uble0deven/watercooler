@@ -51,8 +51,8 @@ async function main() {
   console.log('Default settings after initDb()');
   {
     const s = getSettings();
-    check('calendar_enabled defaults to 0',   s.calendar_enabled  === 0,    s.calendar_enabled);
-    check('meeting_duration defaults to 30',  s.meeting_duration  === 30,   s.meeting_duration);
+    check('calendar_enabled defaults to 1',   s.calendar_enabled  === 1,    s.calendar_enabled);
+    check('meeting_duration defaults to 15',  s.meeting_duration  === 15,   s.meeting_duration);
     check('booking_deadline defaults to 2.5', s.booking_deadline  === 2.5,  s.booking_deadline);
   }
 
