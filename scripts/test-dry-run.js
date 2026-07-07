@@ -52,6 +52,10 @@ async function test(label, fn) {
 }
 
 function cleanupTestData() {
+  // Delete children before parents — matches/match_members reference rounds,
+  // and other test suites leave disposable test rounds WITH matches attached.
+  db.prepare("DELETE FROM match_members WHERE match_id IN (SELECT m.id FROM matches m JOIN rounds r ON r.id = m.round_id WHERE r.created_by LIKE 'test%')").run();
+  db.prepare("DELETE FROM matches WHERE round_id IN (SELECT id FROM rounds WHERE created_by LIKE 'test%')").run();
   db.prepare("DELETE FROM pair_history WHERE round_id IN (SELECT id FROM rounds WHERE created_by LIKE 'test%')").run();
   db.prepare("DELETE FROM rounds WHERE created_by LIKE 'test%'").run();
   db.prepare("DELETE FROM exclusions WHERE slack_user_id LIKE 'U_DRY%'").run();

@@ -11,7 +11,12 @@
 // ── env before any require() ──────────────────────────────────────────────────
 process.env.ADMIN_USER_IDS  = 'UADMIN0';
 process.env.DATABASE_PATH   = './data/test-calendar.db';
-// Deliberately leave Azure creds unset to test the "not configured" path.
+// Deliberately BLANK the Azure creds to test the "not configured" path.
+// dotenv never overrides variables that are already set, so these empty
+// strings beat any real credentials in the local .env file.
+process.env.AZURE_TENANT_ID     = '';
+process.env.AZURE_CLIENT_ID     = '';
+process.env.AZURE_CLIENT_SECRET = '';
 
 const fs = require('node:fs');
 
