@@ -126,14 +126,38 @@ Once Phase 1 all checks out, launch is four commands and an announcement:
 From here on, it runs itself: new channel joiners are auto-enrolled and queued
 for the next round; the scheduler fires a round every 3 weeks.
 
+### What fires immediately vs. what stays silent
+
+None of the go-live steps wait for the scheduled Monday-9AM slot — anything
+user-visible happens **the moment you run the command**:
+
+| Step | Visible to users? | When |
+|---|---|---|
+| `set channel` | 🔇 nothing | — |
+| `sync-channel` | 📨 **welcome DM to everyone in `#virtual-coffee`** | instantly |
+| `dry-run` | 🔇 nothing (only you see the preview) | — |
+| `admin run` | 📨 **intro DMs + slot buttons to every match**, plus the "round is live" channel announcement | instantly |
+| scheduler | 📨 same as `admin run` | only at `intro_day` + `intro_time`, and only if the cadence guard passes |
+
+Practical upshot for a staged launch (e.g. prep Friday, launch Monday):
+- Running `sync-channel` on Friday means the **whole channel gets welcome DMs on
+  Friday** — fine as a teaser, just don't expect them to wait for Monday.
+- `admin run` at 11 AM Monday matches everyone at 11 AM Monday. The 9 AM setting
+  plays no part in manual runs.
+
 ---
 
 ## Good-to-Know Caveats
 
-- **Kick off the first real round manually.** Test rounds count as completed
-  rounds, so the triweekly scheduler thinks a round "just ran" and will wait
-  ~3 weeks. `/watercooler admin run` (step 7) bypasses that; the schedule takes
-  over afterwards.
+- **Kick off the first real round manually — the scheduler won't do it.** Test
+  rounds count as completed rounds, so the triweekly guard thinks a round "just
+  ran" and stays quiet for ~3 weeks. `/watercooler admin run` (step 7) is the
+  launch trigger; the schedule takes over afterwards.
+- **The cadence guard is "at least 20 days," not exactly 21 — by design.** The
+  built-in 1-day grace window means an off-schedule manual run doesn't skew the
+  calendar. Example: first round run manually **Monday 11 AM** → three Mondays
+  later at **9 AM** is 20.9 days elapsed → ≥ 20 → round 2 fires right then, and
+  every following round lands on clean 9 AM Mondays exactly 21 days apart.
 - **Test pairings count toward repeat-avoidance.** Whoever you test-matched with
   won't be re-paired with you for the next 4 rounds. With ~50 people this is a
   non-issue.

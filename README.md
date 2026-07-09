@@ -14,7 +14,10 @@ Internal Slack app for casual 1:1 social matching — similar to Donut, self-hos
 | [docs/PRODUCTION.md](docs/PRODUCTION.md) | Step-by-step deployment guide — Slack setup, scopes, hosting, monitoring |
 | [docs/DONUT_COMPARISON.md](docs/DONUT_COMPARISON.md) | Feature comparison vs. Donut, and a prioritised list of future additions |
 | [docs/OUTLOOK_INTEGRATION.md](docs/OUTLOOK_INTEGRATION.md) | Outlook calendar + Teams auto-booking setup guide (IT + developer steps) |
+| [docs/CHANNEL_ENROLLMENT_PLAN.md](docs/CHANNEL_ENROLLMENT_PLAN.md) | Channel-based auto-enrollment — design record + Slack app config steps (implemented) |
 | [docs/AZURE_DEPLOYMENT.md](docs/AZURE_DEPLOYMENT.md) | Hosting the app on Azure — VM setup, database migration, and keeping it running |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributor guide — setup, tests, conventions, PR workflow |
+| [docs/REPO_MIGRATION.md](docs/REPO_MIGRATION.md) | Plan for moving the repo to the org GitHub + how prod deploys relate to it |
 
 ---
 
