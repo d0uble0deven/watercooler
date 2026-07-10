@@ -6,6 +6,30 @@ All commands start with `/watercooler` typed in any Slack message field.
 
 ---
 
+## How to Run a Slash Command (read this first!)
+
+Watercooler is controlled with Slack **slash commands** — special messages that start with `/`. A few things to know so they work on the first try:
+
+**✅ The right way:**
+
+1. Click into the message box (any channel or DM — it doesn't matter which).
+2. **Type the command as plain text**, starting with the `/`:  `/watercooler status`
+3. As soon as you start typing `/water`, Slack shows a **popup above the message box** with the Watercooler command. That popup is how you know Slack sees it as a command.
+4. Hit Enter. The response appears with an "*Only visible to you*" note — nobody else in the channel sees your command or the reply.
+
+**❌ The most common mistake — code formatting:**
+
+If the command shows up **red and monospaced** in your message box (like `this`), Slack treats it as regular text and will just post it as a message instead of running it. This usually happens when:
+
+- You clicked the `</>` code button (or code block button) in the formatting toolbar before typing
+- You **copy-pasted the command from a document** (including this one!) and the formatting came along for the ride
+
+**The fix:** delete it and retype the command by hand. If you pasted it, paste with `Cmd/Ctrl+Shift+V` (paste as plain text) — or just type it; they're short.
+
+**Quick self-check before hitting Enter:** did the Watercooler popup appear above the message box? If yes, it'll run. If no popup appeared, Slack is about to send it as a plain message.
+
+---
+
 ## For Participants
 
 ### Joining
@@ -100,6 +124,54 @@ Once your meeting time has passed, the bot will send a short follow-up in the gr
 - **Snooze me for a bit** — pauses you from the next round automatically
 
 Responding is optional but helps improve future rounds.
+
+---
+
+## FAQ — How Watercooler Works at DocMe360
+
+*Answers reflect how our workspace is configured.*
+
+**How do I join?**
+Just join `#virtual-coffee`. You'll get a welcome DM from the bot confirming you're in — that's it.
+
+**How often will I get matched?**
+Every **3 weeks**, on **Monday mornings** (around 9 AM Eastern). Watch for a group DM from Watercooler introducing you to your match.
+
+**How long are the meetings?**
+**15 minutes**, over a Teams call. Casual — it's a coffee chat, not a meeting with an agenda.
+
+**What if neither of us picks a time?**
+If nobody clicks a time slot within about **2.5 days**, Watercooler automatically books the best available slot from your calendars and sends the invite. You can always hit 🔄 Reschedule if it picked badly.
+
+**Can I change the meeting time after it's booked?**
+Yes — click **🔄 Reschedule** on the booking confirmation in your match DM. Fresh time options get posted; pick one and the old calendar event is replaced automatically. (Reschedule through the bot, not by editing the Outlook event — the bot won't know about changes made directly in Outlook.)
+
+**Will I get matched with the same person again?**
+Not for a while — Watercooler remembers your past matches and won't re-pair you with the same person within **4 rounds** (roughly 3 months).
+
+**We have an odd number of people. What happens?**
+One group becomes a **trio** instead of a pair. Same idea, one extra friend.
+
+**I'm going on vacation / heads-down on a deadline. How do I sit out?**
+Run `/watercooler pause` — you'll skip upcoming rounds until you run `/watercooler resume`. (You can also click **🤗 Snooze intros** on the post-meeting message, which does the same thing.)
+
+**How do I leave entirely?**
+Leave the `#virtual-coffee` channel — that unenrolls you. Rejoin the channel any time to get back in.
+
+**What's the random fact in my calendar invite?**
+A ☕ conversation starter, in case the chat needs a kickoff. Every match gets a different one.
+
+**Do other people see my `/watercooler` commands?**
+No. Commands and their responses are **only visible to you**, even when typed in a busy channel.
+
+**We never ended up meeting. Is that a problem?**
+No stress — after a couple of weeks the match is simply marked complete and you'll be in the next round as usual. If you want to skip the follow-up entirely, you can just ignore it.
+
+**What timezone are the suggested times in?**
+Each time button is labeled with its timezone (e.g. `2:00 PM EDT`). If you and your match are in the same timezone, times are shown in yours; otherwise they're shown in Eastern.
+
+**Something's broken / I have an idea.**
+Post in `#virtual-coffee` or reach out to **Dev Govindji** on Slack.
 
 ---
 
