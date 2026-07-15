@@ -146,6 +146,9 @@ If nobody clicks a time slot within about **2.5 days**, Watercooler automaticall
 **Can I change the meeting time after it's booked?**
 Yes — click **🔄 Reschedule** on the booking confirmation in your match DM. Fresh time options get posted; pick one and the old calendar event is replaced automatically. (Reschedule through the bot, not by editing the Outlook event — the bot won't know about changes made directly in Outlook.)
 
+**What if my match declines the calendar invite?**
+The bot notices (within about 10 minutes) and posts a note in your match DM with a 🔄 Reschedule button, so you can pick a time that works instead of waiting on a meeting that won't happen.
+
 **Will I get matched with the same person again?**
 Not for a while — Watercooler remembers your past matches and won't re-pair you with the same person within **4 rounds** (roughly 3 months).
 

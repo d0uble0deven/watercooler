@@ -135,6 +135,9 @@ const MIGRATIONS = [
   // Auto-booker "no shared free slots" notice — stamped once so the
   // every-minute scheduler tick never re-posts it (spam fix)
   `ALTER TABLE matches  ADD COLUMN no_slots_notified_at     TEXT`,
+  // Decline watcher — stamped once when a declined invite has been flagged
+  // in the match DM, so the poller never re-posts
+  `ALTER TABLE matches  ADD COLUMN decline_notified_at      TEXT`,
 ];
 
 function runMigrations(db) {

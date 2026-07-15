@@ -448,6 +448,41 @@ function markNoSlotsNotified(matchId) {
 }
 
 /**
+ * Returns booked matches whose meeting is still in the future and whose
+ * declined-invite notice hasn't been sent yet. These are the candidates the
+ * decline watcher polls Microsoft Graph about.
+ *
+ * Excludes the 'pending' claim sentinel — that's an in-flight booking, not a
+ * real event ID that Graph would recognise.
+ */
+function getBookedFutureMatches() {
+  const now = new Date().toISOString();
+  return getDb()
+    .prepare(`
+      SELECT m.*
+      FROM   matches m
+      JOIN   rounds r ON r.id = m.round_id
+      WHERE  m.calendar_event_id   IS NOT NULL
+        AND  m.calendar_event_id   != 'pending'
+        AND  m.slack_dm_channel_id IS NOT NULL
+        AND  m.meeting_start_at    > ?
+        AND  m.decline_notified_at IS NULL
+        AND  r.status = 'completed'
+    `)
+    .all(now);
+}
+
+/**
+ * Stamps a match as having received the one-time "someone declined" notice,
+ * so the decline watcher never re-posts it.
+ */
+function markDeclineNotified(matchId) {
+  getDb()
+    .prepare(`UPDATE matches SET decline_notified_at = datetime('now') WHERE id = ?`)
+    .run(matchId);
+}
+
+/**
  * Persists the calendar event ID, Teams link, and booking timestamp on a match row.
  * Called immediately after the Graph API event is created.
  */
@@ -686,6 +721,8 @@ module.exports = {
   saveSuggestionTs,
   getUnbookedMatchesPastDeadline,
   markNoSlotsNotified,
+  getBookedFutureMatches,
+  markDeclineNotified,
   getRoundById,
   getMostRecentActiveRound,
   getMatchesForRound,

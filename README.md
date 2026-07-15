@@ -181,6 +181,7 @@ src/
     calendarBooker.js — calendar event creation, confirmation message builder
     calendarAutoBooker.js — automatic booking when deadline passes
     meetingCompleter.js — post-meeting follow-up and round-complete channel summary
+    declineWatcher.js   — polls Graph for declined invites, posts reschedule nudge
   matching/
     engine.js         — pure matching algorithm (Fisher-Yates + greedy repeat-avoidance)
   scheduler/

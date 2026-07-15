@@ -107,6 +107,12 @@ function startScheduler(app) {
       const { runCompletionCheck } = require('../integrations/meetingCompleter');
       await runCompletionCheck(app.client, settings);
 
+      // ── Decline watcher ────────────────────────────────────────────────────
+      // Internally throttled to one Graph sweep per ~10 minutes — checks booked
+      // upcoming meetings for declined invites and posts a reschedule nudge.
+      const { runDeclineCheck } = require('../integrations/declineWatcher');
+      await runDeclineCheck(app.client, settings);
+
       const { hour, minute } = parseTime(settings.intro_time);
       const dayNum           = parseDayToNumber(settings.intro_day);
 
