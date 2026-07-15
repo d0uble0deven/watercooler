@@ -132,6 +132,9 @@ const MIGRATIONS = [
   `ALTER TABLE users    ADD COLUMN enrolled_via             TEXT`,
   // Fun fact included in each match's calendar invite (conversation starter)
   `ALTER TABLE matches  ADD COLUMN fun_fact                 TEXT`,
+  // Auto-booker "no shared free slots" notice — stamped once so the
+  // every-minute scheduler tick never re-posts it (spam fix)
+  `ALTER TABLE matches  ADD COLUMN no_slots_notified_at     TEXT`,
 ];
 
 function runMigrations(db) {

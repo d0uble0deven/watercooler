@@ -416,6 +416,7 @@ function getAllUnbookedMatches() {
  * Only includes matches that:
  *   - Have a DM channel (so we can post to them)
  *   - Are NOT already booked
+ *   - Haven't already received the "no shared free slots" notice
  *   - Belong to a completed round older than the deadline
  */
 function getUnbookedMatchesPastDeadline(deadlineHours) {
@@ -425,12 +426,25 @@ function getUnbookedMatchesPastDeadline(deadlineHours) {
       SELECT m.*
       FROM   matches m
       JOIN   rounds r ON r.id = m.round_id
-      WHERE  m.calendar_event_id    IS NULL
-        AND  m.slack_dm_channel_id  IS NOT NULL
+      WHERE  m.calendar_event_id     IS NULL
+        AND  m.slack_dm_channel_id   IS NOT NULL
+        AND  m.no_slots_notified_at  IS NULL
         AND  r.status = 'completed'
         AND  r.completed_at < ?
     `)
     .all(cutoff);
+}
+
+/**
+ * Stamps a match as having received the one-time "no shared free slots"
+ * notice, so the every-minute auto-booking tick never re-posts it.
+ * Manual recovery paths (slot buttons, resend-suggestions, force-book)
+ * are unaffected — they don't read this flag.
+ */
+function markNoSlotsNotified(matchId) {
+  getDb()
+    .prepare(`UPDATE matches SET no_slots_notified_at = datetime('now') WHERE id = ?`)
+    .run(matchId);
 }
 
 /**
@@ -671,6 +685,7 @@ module.exports = {
   markCompletionMessageSent,
   saveSuggestionTs,
   getUnbookedMatchesPastDeadline,
+  markNoSlotsNotified,
   getRoundById,
   getMostRecentActiveRound,
   getMatchesForRound,

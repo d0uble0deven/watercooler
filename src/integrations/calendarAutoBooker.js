@@ -29,6 +29,7 @@ const { formatNameList }   = require('../slack/messaging');
 const {
   getMatchUsers,
   getUnbookedMatchesPastDeadline,
+  markNoSlotsNotified,
   saveBooking,
   saveMeetingTimes,
 } = require('../lib/rounds');
@@ -83,6 +84,10 @@ async function autoBookMatch(client, graphClient, match, settings) {
 
   if (slots.length === 0) {
     console.warn(`[calendarAutoBooker] Match ${match.id}: no free slots found.`);
+    // Stamp BEFORE posting — if the post succeeds but the process dies before
+    // stamping, we'd be back to spamming every minute. A stamp with a failed
+    // post just means one message fewer, which is the safe direction.
+    markNoSlotsNotified(match.id);
     await postOrUpdate(client, match, '⏰ Booking deadline passed — no slots found.', buildNoSlotsMessage());
     return;
   }
