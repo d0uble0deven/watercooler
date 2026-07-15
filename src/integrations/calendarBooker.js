@@ -13,10 +13,11 @@
 // from Microsoft's calendar system.
 
 const config = require("../config");
-const { formatSlotLabel } = require("./calendarScheduler");
+const { formatSlotLabel, pickDisplayTimezone } = require("./calendarScheduler");
 const { formatNameList } = require("../slack/messaging");
 const { toGraphDateTime } = require("./calendarReader");
 const { withRetry } = require("../lib/retryHelper");
+const { getSettings } = require("../lib/rounds");
 
 // ── Booking ───────────────────────────────────────────────────────────────────
 
@@ -52,14 +53,24 @@ async function bookMeeting(
     type: "required",
   }));
 
+  // Store the event in a real IANA timezone rather than UTC. The meeting
+  // instant is identical either way — but Outlook's event-detail view shows
+  // times in the event's STORED zone, so UTC-stored events read as "5:30 PM"
+  // to someone whose calendar grid correctly says 12:30 PM.
+  const orgTz   = getSettings()?.calendar_timezone || config.calendarTimezone;
+  const eventTz = pickDisplayTimezone(
+    users.map((u) => u.ms_timezone).filter(Boolean),
+    orgTz,
+  );
+
   const eventPayload = {
     subject,
     body: {
       contentType: "HTML",
       content: buildEventBodyHtml(users, funFact),
     },
-    start: { dateTime: toGraphDateTime(slotStart), timeZone: "UTC" },
-    end: { dateTime: toGraphDateTime(slotEnd), timeZone: "UTC" },
+    start: toGraphZonedTime(slotStart, eventTz),
+    end: toGraphZonedTime(slotEnd, eventTz),
     attendees,
     isOnlineMeeting: true,
     onlineMeetingProvider: "teamsForBusiness",
@@ -189,6 +200,39 @@ function buildAlreadyBookedMessage(teamsLink) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
+ * Converts a UTC instant into Graph's { dateTime, timeZone } shape, expressed
+ * as wall-clock time in the given IANA zone (DST handled by Intl).
+ * Falls back to UTC if the zone is missing or unrecognised.
+ *
+ *   toGraphZonedTime(new Date('2026-07-15T17:30:00Z'), 'America/Chicago')
+ *   → { dateTime: '2026-07-15T12:30:00', timeZone: 'America/Chicago' }
+ */
+function toGraphZonedTime(date, timezoneId) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezoneId,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(date)
+      .reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
+
+    return {
+      dateTime: `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`,
+      timeZone: timezoneId,
+    };
+  } catch (_) {
+    // Unknown/blank timezone — fall back to the old UTC behaviour
+    return { dateTime: toGraphDateTime(date), timeZone: "UTC" };
+  }
+}
+
+/**
  * Builds the HTML body for the calendar invite email that attendees receive.
  * Appears above the Teams meeting details that Outlook appends automatically.
  */
@@ -245,4 +289,5 @@ module.exports = {
   buildConfirmationMessage,
   buildAlreadyBookedMessage,
   buildEventBodyHtml,
+  toGraphZonedTime,
 };
