@@ -41,8 +41,12 @@ const { saveSuggestionTs }          = require('../lib/rounds');
  * @param {object[]} users      Array of user rows from the DB
  * @param {object}   settings   App settings row (calendar_enabled, meeting_duration)
  * @param {boolean}  testMode   When true, adds a test disclaimer to the posted message
+ * @param {object}   [options]
+ * @param {boolean}  [options.richVariety=false]  When true, offers up to 9 slots
+ *   spanning "later today" through next week (used by reschedule / decline-nudge)
+ *   instead of the standard 3-slot spread used for the initial round suggestion.
  */
-async function suggestMeetingTimes(client, channelId, matchId, users, settings, testMode = false) {
+async function suggestMeetingTimes(client, channelId, matchId, users, settings, testMode = false, options = {}) {
   // ── Guard: feature flags ──────────────────────────────────────────────────
   if (!settings.calendar_enabled) return;
 
@@ -77,34 +81,44 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
     console.log(`[calendarScheduler] No timezone intersection — using org timezone (${orgTz}).`);
   }
 
-  // ── Build near and far search windows ────────────────────────────────────
+  // ── Build search windows ──────────────────────────────────────────────────
+  // Immediate (rich mode only): now → start of the near window — "later today"
+  //   through the next business day. Contiguous with near (no gap, no overlap).
   // Near: +2 to +4 business days (e.g. Mon match → Wed–Fri same week)
   // Far:  +5 to +9 business days (e.g. Mon match → following Mon–Fri)
   // When an intersection is available the windows start/end at the shared UTC
   // hours rather than 9 AM / 5 PM in the org timezone.
-  const near = buildNearWindow(new Date(), orgTz, intersection);
-  const far  = buildFarWindow(new Date(), orgTz, intersection);
+  const richVariety = options.richVariety === true;
+  const near         = buildNearWindow(new Date(), orgTz, intersection);
+  const far           = buildFarWindow(new Date(), orgTz, intersection);
+  const immediate     = richVariety ? buildImmediateWindow(new Date(), orgTz, intersection) : null;
 
-  // ── Free/busy query (single call covers both windows) ────────────────────
-  const busyData = await getFreeBusy(graphClient, emails, near.start, far.end);
+  // ── Free/busy query (single call covers every window in use) ─────────────
+  const queryStart = richVariety ? immediate.start : near.start;
+  const busyData    = await getFreeBusy(graphClient, emails, queryStart, far.end);
 
   // ── Slot finding ──────────────────────────────────────────────────────────
-  // 2 slots from the near window  — prime time preferred, ≥ 2 h apart
-  // 1 slot  from the far window   — prime time preferred, no gap constraint
+  // Standard mode (initial round suggestion — unchanged):
+  //   2 slots from the near window, 1 from the far window. 3 total.
+  // Rich mode (reschedule / decline nudge — more slots, more spread):
+  //   up to 3 slots from each of immediate / near / far. Up to 9 total.
   // With an intersection: checks run in UTC using computed UTC hour bounds.
   // Without one: checks run in orgTz with standard 9–17 / 11–15 defaults.
   const durationMinutes = settings.meeting_duration ?? 30;
   const slotTz          = intersection?.timezoneId ?? orgTz;
   const slotOptions     = intersection ?? {};
 
+  const immediateSlots = richVariety
+    ? findSlotsWithPrimePreference(busyData, immediate.start, immediate.end, durationMinutes, 3, slotTz, 60, slotOptions)
+    : [];
   const nearSlots = findSlotsWithPrimePreference(
-    busyData, near.start, near.end, durationMinutes, 2, slotTz, 120, slotOptions,
+    busyData, near.start, near.end, durationMinutes, richVariety ? 3 : 2, slotTz, 120, slotOptions,
   );
   const farSlots = findSlotsWithPrimePreference(
-    busyData, far.start,  far.end,  durationMinutes, 1, slotTz,   0, slotOptions,
+    busyData, far.start,  far.end,  durationMinutes, richVariety ? 3 : 1, slotTz,   0, slotOptions,
   );
 
-  const slots = [...nearSlots, ...farSlots];
+  const slots = [...immediateSlots, ...nearSlots, ...farSlots];
 
   if (slots.length === 0) {
     console.log(`[calendarScheduler] No shared free slots found for match ${matchId} — skipping suggestions.`);
@@ -469,6 +483,44 @@ function buildFarWindow(fromDate, timezoneId = 'UTC', intersection = null) {
   };
 }
 
+/**
+ * Immediate window: from `fromDate` + a short buffer through the start of the
+ * near window — i.e. "later today" through the next business day. Contiguous
+ * with buildNearWindow (shares the same end point), so the three tiers cover
+ * "now" through +9 business days with no gap and no overlap.
+ *
+ * Only the START needs the buffer/rounding below — the END and the workday/
+ * weekday filtering are handled entirely by findSlots' existing checks, so a
+ * window that starts Friday evening naturally yields zero Friday candidates
+ * and picks back up Monday morning, with no special-casing needed here.
+ *
+ * @param  {Date}        fromDate      Reference point (usually `new Date()`)
+ * @param  {string}      timezoneId    IANA org timezone (fallback when no intersection)
+ * @param  {object|null} intersection  Output of computeIntersection(), or null
+ * @returns {{ start: Date, end: Date }}
+ */
+const IMMEDIATE_START_BUFFER_MINUTES = 30;
+
+function buildImmediateWindow(fromDate, timezoneId = 'UTC', intersection = null) {
+  const buffered = new Date(fromDate.getTime() + IMMEDIATE_START_BUFFER_MINUTES * 60 * 1000);
+  const start     = roundUpToInterval(buffered, 30);
+
+  // Reuse buildNearWindow's own start value as our end — guarantees
+  // contiguity by construction rather than re-deriving the same moment
+  // through parallel hour logic (which is how this went wrong the first time).
+  const { start: end } = buildNearWindow(fromDate, timezoneId, intersection);
+  return { start, end };
+}
+
+/**
+ * Rounds a Date up to the next `intervalMinutes` boundary, so offered slot
+ * start times land on clean marks (e.g. 2:30) instead of odd ones (2:37).
+ */
+function roundUpToInterval(date, intervalMinutes) {
+  const ms = intervalMinutes * 60 * 1000;
+  return new Date(Math.ceil(date.getTime() / ms) * ms);
+}
+
 function nextBusinessDay(date) {
   const d = new Date(date);
   d.setUTCDate(d.getUTCDate() + 1);
@@ -518,6 +570,12 @@ function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC', testMode = 
     style:     'primary',
   }));
 
+  // Slack caps `actions` blocks at 5 elements — split into groups so rich
+  // mode's up-to-9 buttons render across multiple blocks. A 3-button set
+  // (standard mode) still produces exactly one block, unchanged from before.
+  const buttonGroups = [];
+  for (let i = 0; i < buttons.length; i += 5) buttonGroups.push(buttons.slice(i, i + 5));
+
   return [
     {
       type: 'section',
@@ -528,10 +586,7 @@ function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC', testMode = 
           'Click a slot to book it — a calendar invite and Teams meeting link will be sent to everyone.',
       },
     },
-    {
-      type:     'actions',
-      elements: buttons,
-    },
+    ...buttonGroups.map((group) => ({ type: 'actions', elements: group })),
     {
       type: 'context',
       elements: [
@@ -613,6 +668,7 @@ module.exports = {
   buildSearchWindow,
   buildNearWindow,
   buildFarWindow,
+  buildImmediateWindow,
   buildSuggestionsMessage,
   formatSlotLabel,
   // Exported for testing

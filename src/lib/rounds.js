@@ -483,6 +483,33 @@ function markDeclineNotified(matchId) {
 }
 
 /**
+ * Returns the soonest upcoming booked match a user belongs to, or undefined
+ * if they have none. Used by `/watercooler reschedule` so a user doesn't have
+ * to scroll back through Slack history to find their reschedule button.
+ *
+ * Excludes the 'pending' claim sentinel — that's an in-flight booking, not a
+ * real, reschedulable event yet.
+ */
+function getUpcomingBookedMatchForUser(slackUserId) {
+  return getDb()
+    .prepare(`
+      SELECT m.*
+      FROM   matches m
+      JOIN   match_members mm ON mm.match_id = m.id
+      JOIN   users u          ON u.id = mm.user_id
+      JOIN   rounds r         ON r.id = m.round_id
+      WHERE  u.slack_user_id     = ?
+        AND  m.calendar_event_id IS NOT NULL
+        AND  m.calendar_event_id != 'pending'
+        AND  m.meeting_start_at  > datetime('now')
+        AND  r.status = 'completed'
+      ORDER  BY m.meeting_start_at ASC
+      LIMIT  1
+    `)
+    .get(slackUserId);
+}
+
+/**
  * Persists the calendar event ID, Teams link, and booking timestamp on a match row.
  * Called immediately after the Graph API event is created.
  */
@@ -723,6 +750,7 @@ module.exports = {
   markNoSlotsNotified,
   getBookedFutureMatches,
   markDeclineNotified,
+  getUpcomingBookedMatchForUser,
   getRoundById,
   getMostRecentActiveRound,
   getMatchesForRound,

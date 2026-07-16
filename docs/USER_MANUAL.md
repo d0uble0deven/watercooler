@@ -111,9 +111,9 @@ After you pick a slot, the bot replaces the buttons with a confirmation showing 
 
 #### 3. Rescheduling
 
-If you need to change the time, click the **Reschedule** button on the confirmation message. The bot will post fresh slot options in the same DM. Once you pick a new slot, the old calendar event is automatically removed and a new one is created.
+If you need to change the time, click the **Reschedule** button on the confirmation message — or just type `/watercooler reschedule` from anywhere and the bot will find your upcoming meeting for you, so you don't have to scroll back through the DM to find the button. Either way, the bot posts fresh time options in the same DM, with more variety than the original suggestion — spanning later today through next week, not just a few days out. Once you pick a new slot, the old calendar event is automatically removed and a new one is created.
 
-> If you need to reschedule but don't see a Reschedule button, ask an admin to run `resend-suggestions` for your match (see the admin section below).
+> If `/watercooler reschedule` says you don't have an upcoming meeting but you know you do, ask an admin to run `resend-suggestions` for your match (see the admin section below).
 
 #### 4. After the meeting
 
@@ -144,7 +144,10 @@ Every **3 weeks**, on **Monday mornings** (around 9 AM Eastern). Watch for a gro
 If nobody clicks a time slot within about **2.5 days**, Watercooler automatically books the best available slot from your calendars and sends the invite. You can always hit 🔄 Reschedule if it picked badly.
 
 **Can I change the meeting time after it's booked?**
-Yes — click **🔄 Reschedule** on the booking confirmation in your match DM. Fresh time options get posted; pick one and the old calendar event is replaced automatically. (Reschedule through the bot, not by editing the Outlook event — the bot won't know about changes made directly in Outlook.)
+Yes — click **🔄 Reschedule** on the booking confirmation in your match DM, or type `/watercooler reschedule` from anywhere if you can't find that message. Fresh time options get posted (a wider spread than the original — later today through next week), pick one, and the old calendar event is replaced automatically. (Reschedule through the bot, not by editing the Outlook event — the bot won't know about changes made directly in Outlook.)
+
+**I can't find the Reschedule button — the DM has a lot of messages in it.**
+Just run `/watercooler reschedule` — it finds your upcoming meeting automatically and posts fresh time options, no scrolling required.
 
 **What if my match declines the calendar invite?**
 The bot notices (within about 10 minutes) and posts a note in your match DM with a 🔄 Reschedule button, so you can pick a time that works instead of waiting on a meeting that won't happen.

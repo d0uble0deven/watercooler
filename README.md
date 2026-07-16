@@ -73,6 +73,7 @@ Short version:
 | `/watercooler resume` | Come back after pausing |
 | `/watercooler leave` | Opt out entirely |
 | `/watercooler status` | Check your current participation status |
+| `/watercooler reschedule` | Pick a new time for your upcoming meeting (finds it for you — no need to scroll back to the confirmation message) |
 
 ### Admin commands — restricted to `ADMIN_USER_IDS`
 
@@ -152,6 +153,7 @@ Short version:
 | `npm run test:tz-intersection` | Timezone intersection tests (47 tests) |
 | `npm run test:admin-commands` | Admin workflow command tests (40 tests) |
 | `npm run test:reschedule` | Reschedule flow tests (21 tests) |
+| `npm run test:reschedule-variety` | Reschedule slot variety + `/watercooler reschedule` command tests (27 tests) |
 | `npm run test:enrollment` | Channel-enrollment tests (38 tests) |
 | `npm run test:all` | Run all test suites in sequence |
 
@@ -165,7 +167,7 @@ src/
   config.js           — reads all environment variables
   commands/
     index.js          — registers /watercooler with Bolt, routes subcommands
-    user/             — join, pause, resume, leave, status
+    user/             — join, pause, resume, leave, status, reschedule
     admin/            — index (router + admin guard), dry-run, test-run, run,
                         summary, participants, paused, show-settings, recent-rounds,
                         set, exclusions, calendar-status, refresh-names,
@@ -272,3 +274,4 @@ CONTACT_NAME=Your Name
 - [x] Timezone awareness — per-user M365 timezones, shared-window intersection, DST-correct display
 - [x] Admin workflow commands — list-matches, force-book, send-completion, resend-suggestions, cancel-round
 - [x] Reschedule flow — user-initiated reschedule button; deferred old-event deletion after new slot confirmed
+- [x] Reschedule variety + self-serve command — up to 9 slots spanning "later today" through next week (vs. 3 for the initial round suggestion); `/watercooler reschedule` finds your upcoming meeting without needing the original button

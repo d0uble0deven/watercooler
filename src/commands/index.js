@@ -16,6 +16,7 @@ const pause               = require('./user/pause');
 const resume              = require('./user/resume');
 const leave               = require('./user/leave');
 const status              = require('./user/status');
+const reschedule          = require('./user/reschedule');
 const { handleAdmin }     = require('./admin/index');
 
 const HELP_TEXT = `*Watercooler commands:*
@@ -23,7 +24,8 @@ const HELP_TEXT = `*Watercooler commands:*
 • \`/watercooler pause\` — skip the next round (stay opted in)
 • \`/watercooler resume\` — come back after pausing
 • \`/watercooler leave\` — opt out entirely
-• \`/watercooler status\` — check your current status`;
+• \`/watercooler status\` — check your current status
+• \`/watercooler reschedule\` — pick a new time for your upcoming meeting`;
 
 function registerCommands(app) {
   // `client` is Bolt's Web API client — passed down to admin commands that need it.
@@ -36,11 +38,12 @@ function registerCommands(app) {
 
     try {
       switch (subcommand) {
-        case 'join':   return await join(command, respond, client);
-        case 'pause':  return await pause(command, respond);
-        case 'resume': return await resume(command, respond);
-        case 'leave':  return await leave(command, respond);
-        case 'status': return await status(command, respond);
+        case 'join':        return await join(command, respond, client);
+        case 'pause':       return await pause(command, respond);
+        case 'resume':      return await resume(command, respond);
+        case 'leave':       return await leave(command, respond);
+        case 'status':      return await status(command, respond);
+        case 'reschedule':  return await reschedule(command, respond, client);
 
         // Admin subcommands — everything after "admin" is forwarded as text
         case 'admin': {
