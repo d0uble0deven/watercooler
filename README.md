@@ -276,4 +276,4 @@ CONTACT_NAME=Your Name
 - [x] Admin workflow commands — list-matches, force-book, send-completion, resend-suggestions, cancel-round
 - [x] Reschedule flow — user-initiated reschedule button; deferred old-event deletion after new slot confirmed
 - [x] Reschedule variety + self-serve command — up to 9 slots spanning "later today" through next week (vs. 3 for the initial round suggestion); `/watercooler reschedule` finds your match without needing the original button
-- [x] Silent rescheduling — slot options post ephemerally to the requester only; the match partner is notified at the moment a new time is booked, not before. Works for the whole round, booked or not.
+- [x] Silent rescheduling — slot options post ephemerally to the requester only; the match partner is notified at the moment a new time is booked, not before. Works at any point in the round and in any state — booked, never booked, past its meeting time, or already marked complete (a declined invite lands here).
