@@ -34,7 +34,7 @@ const rescheduleCommand = require('../src/commands/user/reschedule');
 const {
   createRound, saveMatch, saveMatchMembers, completeRound, updateMatchChannel,
   saveBooking, saveMeetingTimes, getMatch,
-  getUpcomingBookedMatchForUser, claimBooking, resetBooking,
+  getUpcomingBookedMatchForUser, getReschedulableMatchForUser, claimBooking, resetBooking,
   getSettings, updateSettings,
 } = require('../src/lib/rounds');
 const { createUser, saveUserEmail } = require('../src/lib/users');
@@ -308,6 +308,71 @@ const originalSettings = getSettings();
     check('match was actually reset', getMatch(happyMatch).calendar_event_id === null);
     check('previous_event_id preserved for later cleanup',
       getMatch(happyMatch).previous_event_id === 'evt-happy');
+  }
+
+  // ── Whole-round reschedule: works for an ALREADY-COMPLETED match ────────────
+  // The real-world driver: a partner DECLINES the invite, so the meeting never
+  // happens — but completion fires anyway once the scheduled time passes, and
+  // the match reads "✅ Completed". Rescheduling must still work; this is the
+  // single most likely reason someone reaches for the command.
+  console.log('\n/watercooler reschedule — already-completed match (declined invite case)');
+  {
+    busyResponder = async () => [];
+    const u7 = createUser('U_VAR_7', 'Dev Requester');
+    const u8 = createUser('U_VAR_8', 'Abhi Decliner');
+    saveUserEmail('U_VAR_7', 'dev@example.test');
+    saveUserEmail('U_VAR_8', 'abhi@example.test');
+
+    const roundIdC = createRound('test-variety');
+    const completedMatch = saveMatch(roundIdC);
+    saveMatchMembers(completedMatch, [u7.id, u8.id]);
+    updateMatchChannel(completedMatch, 'C_VAR_DECLINED');
+    completeRound(roundIdC);
+    saveBooking(completedMatch, { calendarEventId: 'evt-declined', teamsLink: null });
+    // Meeting time has passed and the completion message already went out
+    saveMeetingTimes(completedMatch, new Date(Date.now() - 86400000), new Date(Date.now() - 86400000 + 900000));
+    getDb().prepare('UPDATE matches SET completion_message_sent = 1 WHERE id = ?').run(completedMatch);
+
+    const found = getReschedulableMatchForUser('U_VAR_7');
+    check('completed match IS reschedulable', found?.id === completedMatch, found?.id);
+
+    const msgs       = [];
+    const ephemerals = [];
+    const client = {
+      chat: {
+        postMessage:   async () => ({ ts: '7.7' }),
+        postEphemeral: async (m) => { ephemerals.push(m); },
+      },
+    };
+    await rescheduleCommand({ user_id: 'U_VAR_7' }, async (m) => msgs.push(m), client);
+
+    check('completed match → not turned away', !msgs[0].includes("don't have a Watercooler match"), msgs[0]);
+    check('completed match → private options posted', ephemerals.length === 1, ephemerals.length);
+    check('completed match → old event kept for deletion on rebook',
+      getMatch(completedMatch).previous_event_id === 'evt-declined');
+    // completion_message_sent must stay 1: resetting it would make the completion
+    // checker's fallback track fire immediately (meeting_end_at is now NULL and
+    // the round is old), spamming "your window has passed" mid-reschedule.
+    check('completed match → completion flag NOT reset (avoids spurious re-fire)',
+      getMatch(completedMatch).completion_message_sent === 1);
+  }
+
+  // ── Stale matches from long-ago rounds are NOT reschedulable ────────────────
+  console.log('\n/watercooler reschedule — stale round outside the window');
+  {
+    const u9 = createUser('U_VAR_9', 'Rip Van Winkle');
+    saveUserEmail('U_VAR_9', 'rip@example.test');
+
+    const roundIdS = createRound('test-variety');
+    const staleMatch = saveMatch(roundIdS);
+    saveMatchMembers(staleMatch, [u9.id]);
+    updateMatchChannel(staleMatch, 'C_VAR_STALE');
+    completeRound(roundIdS);
+    // Backdate the round well past the 45-day reschedule window
+    getDb().prepare(`UPDATE rounds SET completed_at = datetime('now', '-90 days') WHERE id = ?`).run(roundIdS);
+
+    check('match from a 90-day-old round is not offered',
+      getReschedulableMatchForUser('U_VAR_9') === undefined);
   }
 
   // ── Whole-round reschedule: works for a NEVER-BOOKED match ──────────────────

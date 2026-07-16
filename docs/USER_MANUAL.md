@@ -161,6 +161,9 @@ Just run `/watercooler reschedule` — it finds your match automatically and sho
 **We never picked a time and the buttons are buried. Can we still get options?**
 Yes — `/watercooler reschedule` works for the whole round, even if you never booked anything. It'll show a fresh set of times privately.
 
+**My match declined, or the meeting time passed and we never actually met. Can we still fix it?**
+Yes. `/watercooler reschedule` works for your **whole 3-week round**, no matter what state things are in — declined, never booked, or already marked "completed" because the scheduled time came and went. (The bot marks a match complete when the meeting time passes; it has no way to know whether you actually met.) Just run the command any time before the next round and pick a new time.
+
 **What if my match declines the calendar invite?**
 The bot notices (within about 10 minutes) and posts a note in your match DM with a 🔄 Reschedule button, so you can pick a time that works instead of waiting on a meeting that won't happen.
 

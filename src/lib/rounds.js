@@ -510,21 +510,29 @@ function getUpcomingBookedMatchForUser(slackUserId) {
     .get(slackUserId);
 }
 
+// How far back a round can have started and still be considered "current"
+// for rescheduling purposes. Generously covers the triweekly (21 day) and
+// monthly (28 day) cadences plus slack, while preventing someone from
+// resurrecting a match from months ago (e.g. after a long pause).
+const RESCHEDULE_WINDOW_DAYS = 45;
+
 /**
- * Returns the match a user can currently reschedule — booked OR not yet booked
- * — for the whole life of the round, or undefined if they have none.
+ * Returns the user's current match — the one they'd mean by "my Watercooler
+ * meeting" — or undefined if they have none. Used by `/watercooler reschedule`.
  *
- * Broader than getUpcomingBookedMatchForUser: `/watercooler reschedule` should
- * also work for someone who never picked a time in the first place (their
- * original slot buttons are buried in DM history), which is the more common
- * "I can't find my options" case.
+ * Deliberately permissive: a user should be able to fix their meeting at ANY
+ * point during the round, whatever state it's in. That includes matches which
+ * are:
+ *   • booked and upcoming        — the ordinary case
+ *   • never booked at all        — original slot buttons buried in DM history
+ *   • past their meeting time    — "we never actually met, let's redo it"
+ *   • already marked complete    — completion fires when the scheduled time
+ *     passes, which does NOT mean the meeting happened. A declined invite ends
+ *     up here, and it's the single most likely reason someone reaches for
+ *     reschedule. Excluding these locked out the main use case.
  *
- * Includes matches whose meeting time has already passed but which haven't been
- * completed yet — "we never actually met, let me pick a new time" is a valid ask
- * right up until the round closes out.
- *
- * Ordering puts the soonest *booked* meeting first, then unbooked matches, so a
- * user juggling both gets the one with a real deadline attached.
+ * Scoped to the user's most recent match within RESCHEDULE_WINDOW_DAYS: once a
+ * new round starts they have a new partner, and that's what "reschedule" means.
  */
 function getReschedulableMatchForUser(slackUserId) {
   return getDb()
@@ -534,11 +542,11 @@ function getReschedulableMatchForUser(slackUserId) {
       JOIN   match_members mm ON mm.match_id = m.id
       JOIN   users u          ON u.id = mm.user_id
       JOIN   rounds r         ON r.id = m.round_id
-      WHERE  u.slack_user_id          = ?
-        AND  m.slack_dm_channel_id    IS NOT NULL
-        AND  m.completion_message_sent = 0
+      WHERE  u.slack_user_id       = ?
+        AND  m.slack_dm_channel_id IS NOT NULL
         AND  r.status = 'completed'
-      ORDER  BY (m.meeting_start_at IS NULL) ASC, m.meeting_start_at ASC
+        AND  r.completed_at > datetime('now', '-${RESCHEDULE_WINDOW_DAYS} days')
+      ORDER  BY m.round_id DESC, m.id DESC
       LIMIT  1
     `)
     .get(slackUserId);
