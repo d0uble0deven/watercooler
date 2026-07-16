@@ -73,7 +73,7 @@ Short version:
 | `/watercooler resume` | Come back after pausing |
 | `/watercooler leave` | Opt out entirely |
 | `/watercooler status` | Check your current participation status |
-| `/watercooler reschedule` | Pick a new time for your upcoming meeting (finds it for you — no need to scroll back to the confirmation message) |
+| `/watercooler reschedule` | Privately pick a new time for your current meeting (finds it for you; your match isn't notified until you book) |
 
 ### Admin commands — restricted to `ADMIN_USER_IDS`
 
@@ -153,7 +153,8 @@ Short version:
 | `npm run test:tz-intersection` | Timezone intersection tests (47 tests) |
 | `npm run test:admin-commands` | Admin workflow command tests (40 tests) |
 | `npm run test:reschedule` | Reschedule flow tests (21 tests) |
-| `npm run test:reschedule-variety` | Reschedule slot variety + `/watercooler reschedule` command tests (27 tests) |
+| `npm run test:reschedule-variety` | Reschedule slot variety + `/watercooler reschedule` command tests (34 tests) |
+| `npm run test:booking-privacy` | Private-reschedule → public-confirmation handoff (14 tests) |
 | `npm run test:enrollment` | Channel-enrollment tests (38 tests) |
 | `npm run test:all` | Run all test suites in sequence |
 
@@ -274,4 +275,5 @@ CONTACT_NAME=Your Name
 - [x] Timezone awareness — per-user M365 timezones, shared-window intersection, DST-correct display
 - [x] Admin workflow commands — list-matches, force-book, send-completion, resend-suggestions, cancel-round
 - [x] Reschedule flow — user-initiated reschedule button; deferred old-event deletion after new slot confirmed
-- [x] Reschedule variety + self-serve command — up to 9 slots spanning "later today" through next week (vs. 3 for the initial round suggestion); `/watercooler reschedule` finds your upcoming meeting without needing the original button
+- [x] Reschedule variety + self-serve command — up to 9 slots spanning "later today" through next week (vs. 3 for the initial round suggestion); `/watercooler reschedule` finds your match without needing the original button
+- [x] Silent rescheduling — slot options post ephemerally to the requester only; the match partner is notified at the moment a new time is booked, not before. Works for the whole round, booked or not.

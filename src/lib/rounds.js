@@ -427,6 +427,7 @@ function getUnbookedMatchesPastDeadline(deadlineHours) {
       FROM   matches m
       JOIN   rounds r ON r.id = m.round_id
       WHERE  m.calendar_event_id     IS NULL
+        AND  m.previous_event_id     IS NULL
         AND  m.slack_dm_channel_id   IS NOT NULL
         AND  m.no_slots_notified_at  IS NULL
         AND  r.status = 'completed'
@@ -504,6 +505,40 @@ function getUpcomingBookedMatchForUser(slackUserId) {
         AND  m.meeting_start_at  > datetime('now')
         AND  r.status = 'completed'
       ORDER  BY m.meeting_start_at ASC
+      LIMIT  1
+    `)
+    .get(slackUserId);
+}
+
+/**
+ * Returns the match a user can currently reschedule — booked OR not yet booked
+ * — for the whole life of the round, or undefined if they have none.
+ *
+ * Broader than getUpcomingBookedMatchForUser: `/watercooler reschedule` should
+ * also work for someone who never picked a time in the first place (their
+ * original slot buttons are buried in DM history), which is the more common
+ * "I can't find my options" case.
+ *
+ * Includes matches whose meeting time has already passed but which haven't been
+ * completed yet — "we never actually met, let me pick a new time" is a valid ask
+ * right up until the round closes out.
+ *
+ * Ordering puts the soonest *booked* meeting first, then unbooked matches, so a
+ * user juggling both gets the one with a real deadline attached.
+ */
+function getReschedulableMatchForUser(slackUserId) {
+  return getDb()
+    .prepare(`
+      SELECT m.*
+      FROM   matches m
+      JOIN   match_members mm ON mm.match_id = m.id
+      JOIN   users u          ON u.id = mm.user_id
+      JOIN   rounds r         ON r.id = m.round_id
+      WHERE  u.slack_user_id          = ?
+        AND  m.slack_dm_channel_id    IS NOT NULL
+        AND  m.completion_message_sent = 0
+        AND  r.status = 'completed'
+      ORDER  BY (m.meeting_start_at IS NULL) ASC, m.meeting_start_at ASC
       LIMIT  1
     `)
     .get(slackUserId);
@@ -751,6 +786,7 @@ module.exports = {
   getBookedFutureMatches,
   markDeclineNotified,
   getUpcomingBookedMatchForUser,
+  getReschedulableMatchForUser,
   getRoundById,
   getMostRecentActiveRound,
   getMatchesForRound,

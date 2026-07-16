@@ -258,10 +258,11 @@ const originalSettings = getSettings();
     saveUserEmail('U_VAR_3', 'cara@example.test');
     saveUserEmail('U_VAR_4', 'deion@example.test');
 
-    // No upcoming match
+    // No match at all
     const noneMsgs = [];
     await rescheduleCommand({ user_id: 'U_VAR_NOBODY' }, async (m) => noneMsgs.push(m), {});
-    check('no match → friendly no-meeting message', noneMsgs[0].includes("don't have an upcoming"));
+    check('no match → friendly no-match message',
+      noneMsgs[0].includes("don't have a Watercooler match"), noneMsgs[0]);
 
     // NOTE: 'pending' and 'already_rescheduling' are already covered directly
     // against checkRescheduleEligibility() above. They're structurally
@@ -281,17 +282,65 @@ const originalSettings = getSettings();
     saveBooking(happyMatch, { calendarEventId: 'evt-happy', teamsLink: null });
     saveMeetingTimes(happyMatch, new Date(Date.now() + 3 * 86400000), new Date(Date.now() + 3 * 86400000 + 900000));
 
-    const happyMsgs = [];
-    const posts = [];
-    const client = { chat: { postMessage: async (m) => { posts.push(m); return { ts: '5.5' }; } } };
+    const happyMsgs   = [];
+    const publicPosts = [];
+    const ephemerals  = [];
+    const client = {
+      chat: {
+        postMessage:   async (m) => { publicPosts.push(m); return { ts: '5.5' }; },
+        postEphemeral: async (m) => { ephemerals.push(m); },
+      },
+    };
     await rescheduleCommand({ user_id: 'U_VAR_3' }, async (m) => happyMsgs.push(m), client);
 
     check('happy path names the OTHER participant', happyMsgs[0].includes('Deion Four'), happyMsgs[0]);
     check('happy path does not name the caller', !happyMsgs[0].includes('Cara Three'));
-    check('happy path posted fresh slots to the group DM', posts.some((p) => p.channel === 'C_VAR_CMD_HAPPY'));
+    check('happy path tells the caller it stays private', happyMsgs[0].includes('Only you'), happyMsgs[0]);
+
+    // Silent flow: options go ONLY to the caller, nothing lands in the shared DM
+    check('happy path sent private options to the caller',
+      ephemerals.length === 1 && ephemerals[0].user === 'U_VAR_3', ephemerals.length);
+    check('happy path targeted the group DM channel',
+      ephemerals[0]?.channel === 'C_VAR_CMD_HAPPY');
+    check('happy path posted NOTHING publicly (match not notified)',
+      publicPosts.length === 0, publicPosts);
+
     check('match was actually reset', getMatch(happyMatch).calendar_event_id === null);
     check('previous_event_id preserved for later cleanup',
       getMatch(happyMatch).previous_event_id === 'evt-happy');
+  }
+
+  // ── Whole-round reschedule: works for a NEVER-BOOKED match ──────────────────
+  console.log('\n/watercooler reschedule — never-booked match (whole-round support)');
+  {
+    busyResponder = async () => [];
+    const u5 = createUser('U_VAR_5', 'Nia Five');
+    const u6 = createUser('U_VAR_6', 'Omar Six');
+    saveUserEmail('U_VAR_5', 'nia@example.test');
+    saveUserEmail('U_VAR_6', 'omar@example.test');
+
+    const roundIdN = createRound('test-variety');
+    const neverBooked = saveMatch(roundIdN);
+    saveMatchMembers(neverBooked, [u5.id, u6.id]);
+    updateMatchChannel(neverBooked, 'C_VAR_NEVER');
+    completeRound(roundIdN);
+    // No saveBooking — this pair never picked a time at all.
+
+    const msgs       = [];
+    const ephemerals = [];
+    const client = {
+      chat: {
+        postMessage:   async () => ({ ts: '6.6' }),
+        postEphemeral: async (m) => { ephemerals.push(m); },
+      },
+    };
+    await rescheduleCommand({ user_id: 'U_VAR_5' }, async (m) => msgs.push(m), client);
+
+    check('never-booked match is found', !msgs[0].includes("don't have a Watercooler match"), msgs[0]);
+    check('never-booked → names the partner', msgs[0].includes('Omar Six'), msgs[0]);
+    check('never-booked → private options posted', ephemerals.length === 1, ephemerals.length);
+    check('never-booked → previous_event_id stays null (nothing to delete)',
+      getMatch(neverBooked).previous_event_id === null);
   }
 
   // ── Restore + results ───────────────────────────────────────────────────────

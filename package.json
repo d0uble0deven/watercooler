@@ -36,7 +36,8 @@
     "test:no-slots": "node --disable-warning=ExperimentalWarning scripts/test-no-slots.js",
     "test:decline": "node --disable-warning=ExperimentalWarning scripts/test-decline-watcher.js",
     "test:reschedule-variety": "node --disable-warning=ExperimentalWarning scripts/test-reschedule-variety.js",
-    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:cal-connection && npm run test:cal-settings && npm run test:cal-freebusy && npm run test:cal-slot-logic && npm run test:cal-email-resolve && npm run test:cal-book-slot && npm run test:cal-create-event && npm run test:cal-tz-display && npm run test:meeting-completion && npm run test:slot-distribution && npm run test:tz-intersection && npm run test:admin-commands && npm run test:reschedule && npm run test:enrollment && npm run test:fun-facts && npm run test:no-slots && npm run test:decline && npm run test:reschedule-variety"
+    "test:all": "npm run test && npm run test:commands && npm run test:dry-run && npm run test:admin && npm run test:scheduler && npm run test:cal-connection && npm run test:cal-settings && npm run test:cal-freebusy && npm run test:cal-slot-logic && npm run test:cal-email-resolve && npm run test:cal-book-slot && npm run test:cal-create-event && npm run test:cal-tz-display && npm run test:meeting-completion && npm run test:slot-distribution && npm run test:tz-intersection && npm run test:admin-commands && npm run test:reschedule && npm run test:enrollment && npm run test:fun-facts && npm run test:no-slots && npm run test:decline && npm run test:reschedule-variety && npm run test:booking-privacy",
+    "test:booking-privacy": "node --disable-warning=ExperimentalWarning scripts/test-booking-privacy.js"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",

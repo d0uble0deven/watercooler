@@ -3,18 +3,28 @@
 // Reschedule flow — reachable two ways:
 //   1. Clicking the "🔄 Reschedule" button on a booking confirmation message.
 //   2. Running /watercooler reschedule (src/commands/user/reschedule.js),
-//      which finds the user's upcoming match and reuses this same core logic.
+//      which finds the user's match and reuses this same core logic.
 //
 // Both call checkRescheduleEligibility() + performReschedule() below, so the
 // guard conditions and the reset/re-suggest behavior only exist in one place.
 //
+// PRIVACY MODEL — rescheduling is silent until a new time is actually booked:
+//   • New slot options are posted EPHEMERALLY (visible only to the requester).
+//   • The shared "✅ Meeting booked!" confirmation is left untouched, so the
+//     match partner sees no change — and the old Teams link keeps working,
+//     which is correct: nothing has actually changed for them yet.
+//   • The old calendar event survives until a new slot is picked; bookSlot
+//     deletes it then via previous_event_id.
+//   • The partner finds out at the moment a new time is booked — the normal
+//     public confirmation for the new slot.
+//
 // Flow:
-//   1. Guard: bail if a booking is in-flight ('pending') or already rescheduling.
+//   1. Guard: bail if a booking is in-flight ('pending').
 //   2. resetBooking() — copies calendar_event_id → previous_event_id, clears
-//      booking fields. The old MS365 event is NOT deleted yet; it survives until
-//      the user picks a new slot (bookSlot deletes it then via previous_event_id).
-//   3. Re-run suggestMeetingTimes (rich mode — more slots, more spread) to post
-//      fresh slot buttons to the match DM.
+//      booking fields. Skipped if already mid-reschedule (would clobber the
+//      pointer to the original event that still needs deleting).
+//   3. suggestMeetingTimes in rich + private mode — more slots, more spread,
+//      visible only to the requester.
 
 const { getMatch, getMatchUsers, resetBooking, getSettings } = require('../../lib/rounds');
 const { suggestMeetingTimes } = require('../../integrations/calendarScheduler');
@@ -22,6 +32,10 @@ const { suggestMeetingTimes } = require('../../integrations/calendarScheduler');
 /**
  * Guard-only check — no side effects. Both entry points call this first so
  * they can show the right message (or bail) before touching anything.
+ *
+ * 'already_rescheduling' is NOT an error — it means the match was already
+ * reset and is awaiting a slot pick. Callers should still repost fresh options
+ * (via performReschedule, which skips the redundant reset).
  *
  * @returns {{status: 'not_found'|'pending'|'already_rescheduling'|'ok', match?: object}}
  */
@@ -41,12 +55,23 @@ function checkRescheduleEligibility(matchId) {
 }
 
 /**
- * Performs the reschedule. Assumes checkRescheduleEligibility() already
- * returned 'ok' for this match — does not re-check.
+ * Performs the reschedule and posts fresh options privately to `requesterId`.
+ * Assumes checkRescheduleEligibility() returned 'ok' or 'already_rescheduling'.
+ *
+ * @param {object} client       Bolt Web API client
+ * @param {object} match        Match row
+ * @param {string} requesterId  Slack user ID — sees the ephemeral options
  */
-async function performReschedule(client, match) {
-  resetBooking(match.id);
-  console.log(`[reschedule] Match ${match.id} reset for rescheduling.`);
+async function performReschedule(client, match, requesterId) {
+  // Only reset if there's a live booking to clear. Re-running against a match
+  // that's already mid-reschedule would overwrite previous_event_id with NULL,
+  // orphaning the original calendar event (it would never get deleted).
+  if (match.calendar_event_id) {
+    resetBooking(match.id);
+    console.log(`[reschedule] Match ${match.id} reset for rescheduling.`);
+  } else {
+    console.log(`[reschedule] Match ${match.id} already awaiting a slot — reposting options only.`);
+  }
 
   // Force calendar_enabled so it runs regardless of the global setting (the
   // user already had a booked meeting, Azure is working). richVariety gives
@@ -55,7 +80,8 @@ async function performReschedule(client, match) {
   const settings = { ...getSettings(), calendar_enabled: true };
 
   await suggestMeetingTimes(
-    client, match.slack_dm_channel_id, match.id, users, settings, false, { richVariety: true },
+    client, match.slack_dm_channel_id, match.id, users, settings, false,
+    { richVariety: true, privateToUserId: requesterId },
   );
 }
 
@@ -70,8 +96,8 @@ async function handleReschedule({ action, ack, body, client }) {
     return;
   }
 
-  const channelId = body.channel.id;
-  const messageTs = body.message.ts;
+  const channelId  = body.channel.id;
+  const requesterId = body.user?.id;
 
   const check = checkRescheduleEligibility(matchId);
 
@@ -80,28 +106,34 @@ async function handleReschedule({ action, ack, body, client }) {
     return;
   }
   if (check.status === 'pending') {
-    await safeUpdate(client, channelId, messageTs,
+    await safeEphemeral(client, channelId, requesterId,
       '⏳ A booking is just being confirmed — please wait a moment, then try again.');
     return;
   }
-  if (check.status === 'already_rescheduling') {
-    await safeUpdate(client, channelId, messageTs,
-      '⏳ New time options were already posted — scroll up in this chat to pick a slot.');
-    return;
-  }
 
-  // status === 'ok' — show the working indicator BEFORE the (slower) Graph
-  // call, same ordering as before the refactor.
-  await safeUpdate(client, channelId, messageTs, '🔄 *Rescheduling…* New time options are being prepared.');
-  await performReschedule(client, check.match);
+  // 'ok' or 'already_rescheduling' — either way, post fresh private options.
+  // The shared confirmation message is deliberately left untouched so the
+  // match partner isn't notified until a new time is actually booked.
+  await performReschedule(client, check.match, requesterId);
 }
 
-async function safeUpdate(client, channelId, ts, text) {
+/**
+ * Posts a plain ephemeral note to one user. Used for the guard messages —
+ * never edits the shared confirmation message, which would leak the fact
+ * that someone is rescheduling.
+ */
+async function safeEphemeral(client, channelId, userId, text) {
+  if (!userId) return;
   try {
-    await client.chat.update({ channel: channelId, ts, text, blocks: [{ type: 'section', text: { type: 'mrkdwn', text } }] });
+    await client.chat.postEphemeral({
+      channel: channelId,
+      user:    userId,
+      text,
+      blocks:  [{ type: 'section', text: { type: 'mrkdwn', text } }],
+    });
   } catch (err) {
-    console.warn('[reschedule] Could not update message:', err.message);
+    console.warn('[reschedule] Could not post ephemeral message:', err.message);
   }
 }
 
-module.exports = { handleReschedule, checkRescheduleEligibility, performReschedule };
+module.exports = { handleReschedule, checkRescheduleEligibility, performReschedule, safeEphemeral };

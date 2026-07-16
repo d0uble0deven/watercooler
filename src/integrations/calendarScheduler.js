@@ -45,6 +45,9 @@ const { saveSuggestionTs }          = require('../lib/rounds');
  * @param {boolean}  [options.richVariety=false]  When true, offers up to 9 slots
  *   spanning "later today" through next week (used by reschedule / decline-nudge)
  *   instead of the standard 3-slot spread used for the initial round suggestion.
+ * @param {string}   [options.privateToUserId]  When set, posts the slots as an
+ *   ephemeral message visible ONLY to that user. Used by the reschedule flow so
+ *   the match partner isn't notified until a new time is actually booked.
  */
 async function suggestMeetingTimes(client, channelId, matchId, users, settings, testMode = false, options = {}) {
   // ── Guard: feature flags ──────────────────────────────────────────────────
@@ -129,12 +132,34 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
   // Display times in the shared local timezone when everyone is co-located
   // (e.g. two Chicago users see CDT, not EDT). Mixed timezones fall back to orgTz.
   const displayTz = pickDisplayTimezone(participantTzs, orgTz);
-  const blocks = buildSuggestionsMessage(slots, matchId, displayTz, testMode);
+  const blocks = buildSuggestionsMessage(slots, matchId, displayTz, testMode, {
+    privateNote: !!options.privateToUserId,
+  });
+
+  const fallbackText = '📅 Here are some times that work for your meeting!'; // for notifications
 
   try {
+    if (options.privateToUserId) {
+      // Ephemeral — only the requester sees these options. Their match partner
+      // finds out when a new time is actually booked, not before.
+      await client.chat.postEphemeral({
+        channel: channelId,
+        user:    options.privateToUserId,
+        text:    fallbackText,
+        blocks,
+      });
+      // Deliberately NOT saving a suggestion ts: ephemeral messages return no
+      // reusable timestamp, and the auto-booker must never try to chat.update one.
+      console.log(
+        `[calendarScheduler] Posted ${slots.length} private slot suggestion(s) ` +
+        `for match ${matchId} to ${options.privateToUserId}.`,
+      );
+      return;
+    }
+
     const result = await client.chat.postMessage({
       channel: channelId,
-      text:    '📅 Here are some times that work for your meeting!',  // fallback for notifications
+      text:    fallbackText,
       blocks,
     });
     // Store the message ts so the auto-booker can update this message in-place
@@ -551,9 +576,12 @@ function addBusinessDays(date, n) {
  * @param {number} matchId
  * @param {string}  timezoneId  IANA timezone for display (e.g. 'America/New_York')
  * @param {boolean} testMode    When true, adds a test disclaimer to the context block
+ * @param {object}  [opts]
+ * @param {boolean} [opts.privateNote=false]  When true, the copy reflects that this
+ *   message is visible only to the requester (used for the ephemeral reschedule flow).
  * @returns {object[]}  Slack blocks array
  */
-function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC', testMode = false) {
+function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC', testMode = false, opts = {}) {
   const tzAbbr = getTzAbbr(slots[0].start, timezoneId);
 
   const buttons = slots.map((slot, i) => ({
@@ -576,24 +604,24 @@ function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC', testMode = 
   const buttonGroups = [];
   for (let i = 0; i < buttons.length; i += 5) buttonGroups.push(buttons.slice(i, i + 5));
 
+  const headline =
+    '📅 *Here are some times that work for everyone!*\n' +
+    'Click a slot to book it — a calendar invite and Teams meeting link will be sent to everyone.';
+
+  const footer = opts.privateNote
+    ? `_All times in ${tzAbbr}. Only you can see this — your match will be notified once you book a time._`
+    : `_All times in ${tzAbbr}. If none of these work, coordinate directly in this chat._`;
+
   return [
     {
       type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text:
-          '📅 *Here are some times that work for everyone!*\n' +
-          'Click a slot to book it — a calendar invite and Teams meeting link will be sent to everyone.',
-      },
+      text: { type: 'mrkdwn', text: headline },
     },
     ...buttonGroups.map((group) => ({ type: 'actions', elements: group })),
     {
       type: 'context',
       elements: [
-        {
-          type: 'mrkdwn',
-          text: `_All times in ${tzAbbr}. If none of these work, coordinate directly in this chat._`,
-        },
+        { type: 'mrkdwn', text: footer },
         ...(testMode ? [{
           type: 'mrkdwn',
           text: '_🧪 Test run — please click a slot to help us test the booking flow! No real meeting required._',

@@ -12,7 +12,19 @@
 //   3. Fetch match participants and their emails from DB.
 //   4. Call Graph API to create calendar event + Teams link.
 //   5. Persist booking to DB.
-//   6. Update the original Slack message (replace buttons with confirmation).
+//   6. Show the confirmation (see below).
+//
+// TWO SOURCES OF SLOT BUTTONS — the confirmation path differs:
+//   • Public suggestion message (initial round intro): chat.update() the
+//     original message in place, replacing buttons with the confirmation.
+//   • EPHEMERAL suggestion (the private reschedule flow): the clicked message
+//     is visible only to the requester and has no updatable ts, so instead we
+//     post the confirmation PUBLICLY — this is the moment the match partner
+//     learns about the new time — and then clear the requester's private
+//     options via response_url.
+//
+// Errors during a private flow stay private, so a failed reschedule attempt
+// never leaks into the shared DM.
 
 const config           = require('../../config');
 const { getGraphClient } = require('../../integrations/msGraph');
@@ -24,7 +36,7 @@ const { assignFunFact } = require('../../lib/funFacts');
  * Bolt action handler — registered in app.js for action IDs matching
  * /^watercooler_book_slot_\d+$/
  */
-async function handleBookSlot({ action, ack, body, client }) {
+async function handleBookSlot({ action, ack, body, client, respond }) {
   // Always ack within 3 s to prevent Slack's "operation timed out" error
   await ack();
 
@@ -46,23 +58,29 @@ async function handleBookSlot({ action, ack, body, client }) {
   }
 
   const channelId = body.channel.id;
-  const messageTs = body.message.ts;
+  // Ephemeral messages carry no updatable ts — guard every access accordingly.
+  const isEphemeral = body.container?.is_ephemeral === true;
+  const messageTs   = body.message?.ts;
 
   // ── Claim the booking slot (TOCTOU guard) ─────────────────────────────────
   // Atomically writes 'pending' to calendar_event_id WHERE it is NULL.
   // If another request already claimed or booked this match, bail out now —
   // before making any Graph API call that would create a duplicate event.
   if (!claimBooking(matchId)) {
-    const match = getMatch(matchId);
-    try {
-      await client.chat.update({
-        channel: channelId,
-        ts:      messageTs,
-        text:    '✅ This meeting has already been booked!',
-        blocks:  buildAlreadyBookedMessage(match?.teams_link ?? null),
-      });
-    } catch (err) {
-      console.warn('[bookSlot] Could not update already-booked message:', err.message);
+    const match  = getMatch(matchId);
+    const blocks = buildAlreadyBookedMessage(match?.teams_link ?? null);
+    const text   = '✅ This meeting has already been booked!';
+
+    if (isEphemeral) {
+      // Replace only the requester's private options — the shared DM already
+      // has (or is about to get) the real confirmation from whoever won.
+      await safeRespond(respond, { replace_original: true, text, blocks });
+    } else {
+      try {
+        await client.chat.update({ channel: channelId, ts: messageTs, text, blocks });
+      } catch (err) {
+        console.warn('[bookSlot] Could not update already-booked message:', err.message);
+      }
     }
     return;
   }
@@ -73,7 +91,7 @@ async function handleBookSlot({ action, ack, body, client }) {
 
   if (emails.length < users.length || users.length === 0) {
     releaseBookingClaim(matchId);
-    await safePostMessage(client, channelId,
+    await notifyRequester({ isEphemeral, respond, client, channelId },
       '⚠️ Couldn\'t book the meeting — some participants don\'t have email addresses on file.\n' +
       '_Make sure the `users:read.email` Slack scope is enabled and everyone has joined Watercooler._'
     );
@@ -84,7 +102,7 @@ async function handleBookSlot({ action, ack, body, client }) {
   const graphClient = getGraphClient();
   if (!graphClient) {
     releaseBookingClaim(matchId);
-    await safePostMessage(client, channelId,
+    await notifyRequester({ isEphemeral, respond, client, channelId },
       '⚠️ Calendar integration is not configured — Azure credentials are missing from `.env`.'
     );
     return;
@@ -100,7 +118,7 @@ async function handleBookSlot({ action, ack, body, client }) {
   } catch (err) {
     releaseBookingClaim(matchId); // let the user retry by clicking again
     console.error('[bookSlot] Graph API booking failed:', err.message);
-    await safePostMessage(client, channelId,
+    await notifyRequester({ isEphemeral, respond, client, channelId },
       `⚠️ Couldn't create the calendar event: _${err.message}_\n` +
       'Please coordinate a time directly in this chat.'
     );
@@ -137,17 +155,35 @@ async function handleBookSlot({ action, ack, body, client }) {
     }
   }
 
-  // ── Update Slack message (replace buttons with confirmation) ────────────────
+  // ── Show the confirmation ──────────────────────────────────────────────────
   const settings = getSettings();
   const timezone = config.calendarTimezone;
+  const blocks   = buildConfirmationMessage(booking, users, timezone, matchId);
 
-  try {
-    await client.chat.update({
-      channel: channelId,
-      ts:      messageTs,
-      text:    '✅ Meeting booked!',
-      blocks:  buildConfirmationMessage(booking, users, timezone, matchId),
+  if (isEphemeral) {
+    // Private reschedule flow. Post the confirmation PUBLICLY first — this is
+    // the moment the match partner learns the time changed, and it's the part
+    // that must not be lost. Clearing the requester's private options is
+    // best-effort cleanup afterwards.
+    try {
+      await client.chat.postMessage({ channel: channelId, text: '✅ Meeting booked!', blocks });
+    } catch (err) {
+      console.error('[bookSlot] Could not post booking confirmation:', err.message);
+    }
+    await safeRespond(respond, {
+      replace_original: true,
+      text: '✅ Booked! The confirmation has been posted in this chat.',
+      blocks: [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: '✅ *Booked!* The confirmation has been posted in this chat.' },
+      }],
     });
+    return;
+  }
+
+  // Public suggestion message — swap the buttons out for the confirmation.
+  try {
+    await client.chat.update({ channel: channelId, ts: messageTs, text: '✅ Meeting booked!', blocks });
   } catch (err) {
     // Non-fatal — the booking was made, we just couldn't update the message
     console.warn('[bookSlot] Could not update Slack message after booking:', err.message);
@@ -158,6 +194,28 @@ async function handleBookSlot({ action, ack, body, client }) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Sends a message back to whoever clicked, matching the privacy of the message
+ * they clicked: ephemeral (private reschedule) stays private via response_url;
+ * a public suggestion message posts to the shared DM as before.
+ */
+async function notifyRequester({ isEphemeral, respond, client, channelId }, text) {
+  if (isEphemeral) {
+    await safeRespond(respond, { replace_original: false, text });
+    return;
+  }
+  await safePostMessage(client, channelId, text);
+}
+
+async function safeRespond(respond, payload) {
+  if (typeof respond !== 'function') return;
+  try {
+    await respond(payload);
+  } catch (err) {
+    console.warn('[bookSlot] Could not respond via response_url:', err.message);
+  }
+}
 
 async function safePostMessage(client, channelId, text) {
   try {

@@ -59,16 +59,19 @@ function captureRespond() {
   return { msgs, respond: async (m) => msgs.push(m) };
 }
 
-// Build a minimal action body for Bolt action handlers
+// Build a minimal action body for Bolt action handlers.
+// Includes body.user.id — real Slack always sends it, and the reschedule flow
+// needs it to know who to show the private (ephemeral) options to.
 function makeActionBody(matchId, channelId = 'C_TEST', ts = '1234567890.123456') {
   return {
     action: { value: String(matchId) },
     ack:    async () => {},
-    body:   { channel: { id: channelId }, message: { ts } },
+    body:   { channel: { id: channelId }, message: { ts }, user: { id: 'U_CLICKER' } },
     client: {
       chat: {
-        update:      async () => {},
-        postMessage: async () => {},
+        update:       async () => {},
+        postMessage:  async () => {},
+        postEphemeral: async () => {},
       },
     },
   };
@@ -147,6 +150,10 @@ console.log('\n=== Reschedule Flow Tests ===\n');
   }
 
   // ── handleReschedule — guards ────────────────────────────────────────────────
+  // NOTE: rescheduling is now SILENT — the shared confirmation message is never
+  // edited, and options/notices go out ephemerally to the clicker only. These
+  // assertions verify chat.update is never called (which would notify the match
+  // partner that something changed).
   console.log('\nhandleReschedule — guards');
   {
     // Booking in-flight: calendar_event_id = 'pending'
@@ -155,36 +162,49 @@ console.log('\n=== Reschedule Flow Tests ===\n');
     completeRound(roundId);
     getDb().prepare(`UPDATE matches SET calendar_event_id = 'pending' WHERE id = ?`).run(matchId);
 
-    const updateCalls = [];
-    const { action, ack, body, client: c } = makeActionBody(matchId);
+    const updateCalls    = [];
+    const ephemeralCalls = [];
+    const { action, ack, body } = makeActionBody(matchId);
     const trackingClient = {
       chat: {
-        update:      async (a) => updateCalls.push(a),
-        postMessage: async () => {},
+        update:        async (a) => updateCalls.push(a),
+        postMessage:   async () => {},
+        postEphemeral: async (a) => ephemeralCalls.push(a),
       },
     };
     await handleReschedule({ action, ack, body, client: trackingClient });
-    check('pending booking → update message with wait notice',
-      updateCalls.length === 1 && updateCalls[0].text.includes('just being confirmed'));
+    check('pending booking → ephemeral wait notice to the clicker',
+      ephemeralCalls.length === 1 && ephemeralCalls[0].text.includes('just being confirmed'),
+      ephemeralCalls);
+    check('pending booking → targets the clicker',
+      ephemeralCalls[0]?.user === 'U_CLICKER');
+    check('pending booking → shared message NOT edited (stays silent)',
+      updateCalls.length === 0, updateCalls);
 
-    // Already rescheduling: calendar_event_id = null, previous_event_id set
+    // Already rescheduling: calendar_event_id = null, previous_event_id set.
+    // New behavior: repost fresh options privately rather than a stale
+    // "scroll up" pointer (ephemeral messages can vanish on client reload).
     const roundId2 = createRound('test-reschedule-already');
     const matchId2 = saveMatch(roundId2);
     completeRound(roundId2);
+    updateMatchChannel(matchId2, 'C_TEST');
     saveBooking(matchId2, { calendarEventId: 'evt-some', teamsLink: null });
     resetBooking(matchId2); // now calendar_event_id=null, previous_event_id='evt-some'
 
     const updateCalls2 = [];
-    const body2 = { channel: { id: 'C_TEST' }, message: { ts: '999.000' } };
+    const body2 = { channel: { id: 'C_TEST' }, message: { ts: '999.000' }, user: { id: 'U_CLICKER' } };
     const trackingClient2 = {
       chat: {
-        update:      async (a) => updateCalls2.push(a),
-        postMessage: async () => {},
+        update:        async (a) => updateCalls2.push(a),
+        postMessage:   async () => {},
+        postEphemeral: async () => {},
       },
     };
     await handleReschedule({ action: { value: String(matchId2) }, ack: async () => {}, body: body2, client: trackingClient2 });
-    check('already rescheduling → update message with scroll notice',
-      updateCalls2.length === 1 && updateCalls2[0].text.includes('already posted'));
+    check('already rescheduling → shared message NOT edited',
+      updateCalls2.length === 0, updateCalls2);
+    check('already rescheduling → previous_event_id preserved (not clobbered)',
+      getDb().prepare('SELECT previous_event_id FROM matches WHERE id = ?').get(matchId2).previous_event_id === 'evt-some');
   }
 
   // ── handleReschedule — happy path ────────────────────────────────────────────
@@ -193,25 +213,34 @@ console.log('\n=== Reschedule Flow Tests ===\n');
     const roundId = createRound('test-reschedule-happy');
     const matchId = saveMatch(roundId);
     completeRound(roundId);
+    updateMatchChannel(matchId, 'C_HAPPY');
     saveBooking(matchId, { calendarEventId: 'evt-real-789', teamsLink: 'https://teams/real' });
 
-    const updateCalls = [];
-    // suggestMeetingTimes will bail early (calendar_enabled check / Azure missing)
-    // but we can confirm resetBooking ran and the message was updated
+    const updateCalls      = [];
+    const publicPosts      = [];
+    const ephemeralCalls   = [];
     const trackingClient = {
       chat: {
-        update:      async (a) => updateCalls.push(a),
-        postMessage: async () => {},
+        update:        async (a) => updateCalls.push(a),
+        postMessage:   async (a) => { publicPosts.push(a); return { ts: '1.1' }; },
+        postEphemeral: async (a) => ephemeralCalls.push(a),
       },
     };
-    const body = { channel: { id: 'C_HAPPY' }, message: { ts: '111.222' } };
+    const body = { channel: { id: 'C_HAPPY' }, message: { ts: '111.222' }, user: { id: 'U_CLICKER' } };
     await handleReschedule({ action: { value: String(matchId) }, ack: async () => {}, body, client: trackingClient });
 
     const afterReset = getMatch(matchId);
     check('happy path: calendar_event_id cleared',         afterReset.calendar_event_id === null);
     check('happy path: previous_event_id = old event ID',  afterReset.previous_event_id === 'evt-real-789');
-    check('happy path: update called with rescheduling text',
-      updateCalls.length >= 1 && updateCalls[0].text.includes('Rescheduling'));
+
+    // The whole point of the silent flow: the partner must see nothing until
+    // a new time is actually booked.
+    check('happy path: shared confirmation NOT edited',    updateCalls.length === 0, updateCalls);
+    check('happy path: nothing posted publicly',           publicPosts.length === 0, publicPosts);
+    check('happy path: options sent privately to clicker',
+      ephemeralCalls.length === 1 && ephemeralCalls[0].user === 'U_CLICKER', ephemeralCalls.length);
+    check('happy path: private options carry slot buttons',
+      (ephemeralCalls[0]?.blocks || []).some((b) => b.type === 'actions'));
   }
 
   // ── previous_event_id cleared by clearPreviousEvent ─────────────────────────
