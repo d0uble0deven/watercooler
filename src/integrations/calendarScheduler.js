@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 // Orchestrates the calendar-suggestion flow for a match group:
 //
@@ -16,12 +16,15 @@
 //   • CALENDAR_ENABLED=true in .env (or set via admin command)
 //   • Slack app has the `users:read.email` scope (add in api.slack.com → OAuth & Permissions)
 
-const config               = require('../config');
-const { getGraphClient }   = require('./msGraph');
-const { getFreeBusy }      = require('./calendarReader');
-const { findSlots, findSlotsWithPrimePreference } = require('../lib/slotFinder');
-const { saveUserEmail, saveUserTimezone, updateUser } = require('../lib/users');
-const { saveSuggestionTs }          = require('../lib/rounds');
+const config = require("../config");
+const { getGraphClient } = require("./msGraph");
+const { getFreeBusy } = require("./calendarReader");
+const {
+  findSlots,
+  findSlotsWithPrimePreference,
+} = require("../lib/slotFinder");
+const { saveUserEmail, saveUserTimezone, updateUser } = require("../lib/users");
+const { saveSuggestionTs } = require("../lib/rounds");
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -49,13 +52,23 @@ const { saveSuggestionTs }          = require('../lib/rounds');
  *   ephemeral message visible ONLY to that user. Used by the reschedule flow so
  *   the match partner isn't notified until a new time is actually booked.
  */
-async function suggestMeetingTimes(client, channelId, matchId, users, settings, testMode = false, options = {}) {
-  // ── Guard: feature flags ──────────────────────────────────────────────────
+async function suggestMeetingTimes(
+  client,
+  channelId,
+  matchId,
+  users,
+  settings,
+  testMode = false,
+  options = {},
+) {
+  // ──  Guard: feature flags  ──────────────────────────────────────────────────
   if (!settings.calendar_enabled) return;
 
   const graphClient = getGraphClient();
   if (!graphClient) {
-    console.warn('[calendarScheduler] Azure credentials missing — skipping suggestions.');
+    console.warn(
+      "[calendarScheduler] Azure credentials missing — skipping suggestions.",
+    );
     return;
   }
 
@@ -63,7 +76,9 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
   const emails = await resolveEmails(client, users);
   if (emails.length < users.length) {
     const missing = users.length - emails.length;
-    console.warn(`[calendarScheduler] ${missing} user(s) missing email — skipping suggestions for match ${matchId}.`);
+    console.warn(
+      `[calendarScheduler] ${missing} user(s) missing email — skipping suggestions for match ${matchId}.`,
+    );
     return;
   }
 
@@ -71,17 +86,21 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
   // participantTzs: IANA strings for each user whose M365 timezone we know.
   // intersection:   UTC hour bounds covering the hours all participants share.
   // Falls back to orgTz (null intersection) when timezones can't be resolved.
-  const orgTz          = settings.calendar_timezone ?? config.calendarTimezone;
+  const orgTz = settings.calendar_timezone ?? config.calendarTimezone;
   const participantTzs = await resolveTimezones(graphClient, users);
-  const intersection   = computeIntersection(participantTzs, new Date());
+  const intersection = computeIntersection(participantTzs, new Date());
 
   if (intersection) {
-    const tzList = participantTzs.join(', ');
-    console.log(`[calendarScheduler] Timezone intersection for match ${matchId} (${tzList}):`,
+    const tzList = participantTzs.join(", ");
+    console.log(
+      `[calendarScheduler] Timezone intersection for match ${matchId} (${tzList}):`,
       `workday ${intersection.workdayStartHour}–${intersection.workdayEndHour} UTC, ` +
-      `prime ${intersection.primeStartHour}–${intersection.primeEndHour} UTC`);
+        `prime ${intersection.primeStartHour}–${intersection.primeEndHour} UTC`,
+    );
   } else {
-    console.log(`[calendarScheduler] No timezone intersection — using org timezone (${orgTz}).`);
+    console.log(
+      `[calendarScheduler] No timezone intersection — using org timezone (${orgTz}).`,
+    );
   }
 
   // ── Build search windows ──────────────────────────────────────────────────
@@ -92,13 +111,15 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
   // When an intersection is available the windows start/end at the shared UTC
   // hours rather than 9 AM / 5 PM in the org timezone.
   const richVariety = options.richVariety === true;
-  const near         = buildNearWindow(new Date(), orgTz, intersection);
-  const far           = buildFarWindow(new Date(), orgTz, intersection);
-  const immediate     = richVariety ? buildImmediateWindow(new Date(), orgTz, intersection) : null;
+  const near = buildNearWindow(new Date(), orgTz, intersection);
+  const far = buildFarWindow(new Date(), orgTz, intersection);
+  const immediate = richVariety
+    ? buildImmediateWindow(new Date(), orgTz, intersection)
+    : null;
 
   // ── Free/busy query (single call covers every window in use) ─────────────
   const queryStart = richVariety ? immediate.start : near.start;
-  const busyData    = await getFreeBusy(graphClient, emails, queryStart, far.end);
+  const busyData = await getFreeBusy(graphClient, emails, queryStart, far.end);
 
   // ── Slot finding ──────────────────────────────────────────────────────────
   // Standard mode (initial round suggestion — unchanged):
@@ -108,23 +129,48 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
   // With an intersection: checks run in UTC using computed UTC hour bounds.
   // Without one: checks run in orgTz with standard 9–17 / 11–15 defaults.
   const durationMinutes = settings.meeting_duration ?? 30;
-  const slotTz          = intersection?.timezoneId ?? orgTz;
-  const slotOptions     = intersection ?? {};
+  const slotTz = intersection?.timezoneId ?? orgTz;
+  const slotOptions = intersection ?? {};
 
   const immediateSlots = richVariety
-    ? findSlotsWithPrimePreference(busyData, immediate.start, immediate.end, durationMinutes, 3, slotTz, 60, slotOptions)
+    ? findSlotsWithPrimePreference(
+        busyData,
+        immediate.start,
+        immediate.end,
+        durationMinutes,
+        3,
+        slotTz,
+        60,
+        slotOptions,
+      )
     : [];
   const nearSlots = findSlotsWithPrimePreference(
-    busyData, near.start, near.end, durationMinutes, richVariety ? 3 : 2, slotTz, 120, slotOptions,
+    busyData,
+    near.start,
+    near.end,
+    durationMinutes,
+    richVariety ? 3 : 2,
+    slotTz,
+    120,
+    slotOptions,
   );
   const farSlots = findSlotsWithPrimePreference(
-    busyData, far.start,  far.end,  durationMinutes, richVariety ? 3 : 1, slotTz,   0, slotOptions,
+    busyData,
+    far.start,
+    far.end,
+    durationMinutes,
+    richVariety ? 3 : 1,
+    slotTz,
+    0,
+    slotOptions,
   );
 
   const slots = [...immediateSlots, ...nearSlots, ...farSlots];
 
   if (slots.length === 0) {
-    console.log(`[calendarScheduler] No shared free slots found for match ${matchId} — skipping suggestions.`);
+    console.log(
+      `[calendarScheduler] No shared free slots found for match ${matchId} — skipping suggestions.`,
+    );
     return;
   }
 
@@ -136,7 +182,7 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
     privateNote: !!options.privateToUserId,
   });
 
-  const fallbackText = '📅 Here are some times that work for your meeting!'; // for notifications
+  const fallbackText = "📅 Here are some times that work for your meeting!"; // for notifications
 
   try {
     if (options.privateToUserId) {
@@ -144,29 +190,34 @@ async function suggestMeetingTimes(client, channelId, matchId, users, settings, 
       // finds out when a new time is actually booked, not before.
       await client.chat.postEphemeral({
         channel: channelId,
-        user:    options.privateToUserId,
-        text:    fallbackText,
+        user: options.privateToUserId,
+        text: fallbackText,
         blocks,
       });
       // Deliberately NOT saving a suggestion ts: ephemeral messages return no
       // reusable timestamp, and the auto-booker must never try to chat.update one.
       console.log(
         `[calendarScheduler] Posted ${slots.length} private slot suggestion(s) ` +
-        `for match ${matchId} to ${options.privateToUserId}.`,
+          `for match ${matchId} to ${options.privateToUserId}.`,
       );
       return;
     }
 
     const result = await client.chat.postMessage({
       channel: channelId,
-      text:    fallbackText,
+      text: fallbackText,
       blocks,
     });
     // Store the message ts so the auto-booker can update this message in-place
     if (result?.ts) saveSuggestionTs(matchId, result.ts);
-    console.log(`[calendarScheduler] Posted ${slots.length} slot suggestion(s) for match ${matchId}.`);
+    console.log(
+      `[calendarScheduler] Posted ${slots.length} slot suggestion(s) for match ${matchId}.`,
+    );
   } catch (err) {
-    console.error(`[calendarScheduler] Failed to post suggestions for match ${matchId}:`, err.message);
+    console.error(
+      `[calendarScheduler] Failed to post suggestions for match ${matchId}:`,
+      err.message,
+    );
   }
 }
 
@@ -191,29 +242,35 @@ async function resolveEmails(client, users) {
 
     try {
       const result = await client.users.info({ user: user.slack_user_id });
-      const email  = result?.user?.profile?.email;
+      const email = result?.user?.profile?.email;
 
       if (email) {
-        saveUserEmail(user.slack_user_id, email);  // cache for future rounds
+        saveUserEmail(user.slack_user_id, email); // cache for future rounds
 
         // Also refresh display name to real name — heals username-style names
         // (e.g. "dev.govindji" → "Dev Govindji") without requiring a re-join
-        const realName = result?.user?.profile?.real_name
-                      || result?.user?.profile?.display_name;
+        const realName =
+          result?.user?.profile?.real_name ||
+          result?.user?.profile?.display_name;
         if (realName && realName !== user.display_name) {
           updateUser(user.slack_user_id, { display_name: realName });
-          console.log(`[calendarScheduler] Updated display name for ${user.slack_user_id}: "${user.display_name}" → "${realName}"`);
+          console.log(
+            `[calendarScheduler] Updated display name for ${user.slack_user_id}: "${user.display_name}" → "${realName}"`,
+          );
         }
 
         emails.push(email);
       } else {
         console.warn(
           `[calendarScheduler] No email in Slack profile for ${user.slack_user_id}. ` +
-          'Ensure the Slack app has the users:read.email OAuth scope.'
+            "Ensure the Slack app has the users:read.email OAuth scope.",
         );
       }
     } catch (err) {
-      console.warn(`[calendarScheduler] users.info failed for ${user.slack_user_id}:`, err.message);
+      console.warn(
+        `[calendarScheduler] users.info failed for ${user.slack_user_id}:`,
+        err.message,
+      );
     }
   }
 
@@ -229,21 +286,21 @@ async function resolveEmails(client, users) {
 
 const WINDOWS_TO_IANA = {
   // ── United States ──────────────────────────────────────────────────────────
-  'Eastern Standard Time':         'America/New_York',
-  'Central Standard Time':         'America/Chicago',
-  'Mountain Standard Time':        'America/Denver',
-  'US Mountain Standard Time':     'America/Phoenix',    // Arizona — no DST
-  'Pacific Standard Time':         'America/Los_Angeles',
-  'Alaska Standard Time':          'America/Anchorage',
-  'Hawaii-Aleutian Standard Time': 'Pacific/Honolulu',
-  'Atlantic Standard Time':        'America/Halifax',
+  "Eastern Standard Time": "America/New_York",
+  "Central Standard Time": "America/Chicago",
+  "Mountain Standard Time": "America/Denver",
+  "US Mountain Standard Time": "America/Phoenix", // Arizona — no DST
+  "Pacific Standard Time": "America/Los_Angeles",
+  "Alaska Standard Time": "America/Anchorage",
+  "Hawaii-Aleutian Standard Time": "Pacific/Honolulu",
+  "Atlantic Standard Time": "America/Halifax",
   // ── Common international ───────────────────────────────────────────────────
-  'UTC':                           'UTC',
-  'GMT Standard Time':             'Europe/London',
-  'W. Europe Standard Time':       'Europe/Berlin',
-  'Central Europe Standard Time':  'Europe/Budapest',
-  'Romance Standard Time':         'Europe/Paris',
-  'India Standard Time':           'Asia/Kolkata',
+  UTC: "UTC",
+  "GMT Standard Time": "Europe/London",
+  "W. Europe Standard Time": "Europe/Berlin",
+  "Central Europe Standard Time": "Europe/Budapest",
+  "Romance Standard Time": "Europe/Paris",
+  "India Standard Time": "Asia/Kolkata",
 };
 
 // ── Timezone resolution ───────────────────────────────────────────────────────
@@ -271,34 +328,37 @@ async function resolveTimezones(graphClient, users) {
 
     // Need an email address to query Graph
     if (!user.slack_email) {
-      console.warn(`[calendarScheduler] No email for ${user.slack_user_id} — cannot fetch timezone.`);
+      console.warn(
+        `[calendarScheduler] No email for ${user.slack_user_id} — cannot fetch timezone.`,
+      );
       continue;
     }
 
     try {
-      const settings  = await graphClient
+      const settings = await graphClient
         .api(`/users/${encodeURIComponent(user.slack_email)}/mailboxSettings`)
         .get();
 
       const windowsTz = settings?.timeZone;
-      const ianaTz    = windowsTz ? (WINDOWS_TO_IANA[windowsTz] ?? null) : null;
+      const ianaTz = windowsTz ? (WINDOWS_TO_IANA[windowsTz] ?? null) : null;
 
       if (ianaTz) {
         saveUserTimezone(user.slack_user_id, ianaTz);
         timezones.push(ianaTz);
         console.log(
           `[calendarScheduler] Cached timezone for ${user.slack_user_id}: ` +
-          `"${windowsTz}" → "${ianaTz}"`
+            `"${windowsTz}" → "${ianaTz}"`,
         );
       } else {
         console.warn(
           `[calendarScheduler] Unknown M365 timezone "${windowsTz}" for ${user.slack_user_id} — ` +
-          'falling back to org timezone for this user.'
+            "falling back to org timezone for this user.",
         );
       }
     } catch (err) {
       console.warn(
-        `[calendarScheduler] mailboxSettings fetch failed for ${user.slack_user_id}:`, err.message
+        `[calendarScheduler] mailboxSettings fetch failed for ${user.slack_user_id}:`,
+        err.message,
       );
     }
   }
@@ -348,29 +408,32 @@ function computeIntersection(timezones, referenceDate) {
     return (utcDate.getTime() - refDayStartMs) / 3600000;
   }
 
-  const workdayStarts = timezones.map((tz) => toUtcHour(9,  tz));
-  const workdayEnds   = timezones.map((tz) => toUtcHour(17, tz));
-  const primeStarts   = timezones.map((tz) => toUtcHour(11, tz));
-  const primeEnds     = timezones.map((tz) => toUtcHour(15, tz));
+  const workdayStarts = timezones.map((tz) => toUtcHour(9, tz));
+  const workdayEnds = timezones.map((tz) => toUtcHour(17, tz));
+  const primeStarts = timezones.map((tz) => toUtcHour(11, tz));
+  const primeEnds = timezones.map((tz) => toUtcHour(15, tz));
 
   const workdayStartHour = Math.max(...workdayStarts);
-  const workdayEndHour   = Math.min(...workdayEnds);
+  const workdayEndHour = Math.min(...workdayEnds);
 
   if (workdayStartHour >= workdayEndHour) {
-    console.warn('[calendarScheduler] No working-hours overlap — falling back to org timezone.');
+    console.warn(
+      "[calendarScheduler] No working-hours overlap — falling back to org timezone.",
+    );
     return null;
   }
 
   const primeStartHour = Math.max(...primeStarts);
-  const primeEndHour   = Math.min(...primeEnds);
+  const primeEndHour = Math.min(...primeEnds);
 
   return {
     workdayStartHour,
     workdayEndHour,
     // If prime windows don't overlap, widen prime to the full shared workday
-    primeStartHour: primeStartHour < primeEndHour ? primeStartHour : workdayStartHour,
-    primeEndHour:   primeStartHour < primeEndHour ? primeEndHour   : workdayEndHour,
-    timezoneId:     'UTC',  // all hours are UTC; slot checks must run in UTC
+    primeStartHour:
+      primeStartHour < primeEndHour ? primeStartHour : workdayStartHour,
+    primeEndHour: primeStartHour < primeEndHour ? primeEndHour : workdayEndHour,
+    timezoneId: "UTC", // all hours are UTC; slot checks must run in UTC
   };
 }
 
@@ -388,12 +451,12 @@ function computeIntersection(timezones, referenceDate) {
  * @param  {string} timezoneId    IANA timezone (default 'UTC')
  * @returns {{ start: Date, end: Date }}
  */
-function buildSearchWindow(fromDate, businessDays = 5, timezoneId = 'UTC') {
+function buildSearchWindow(fromDate, businessDays = 5, timezoneId = "UTC") {
   const startDay = nextBusinessDay(fromDate);
-  const start    = setLocalHour(startDay, 9, 0, timezoneId);
+  const start = setLocalHour(startDay, 9, 0, timezoneId);
 
   const endDay = addBusinessDays(new Date(startDay), businessDays);
-  const end    = setLocalHour(endDay, 17, 0, timezoneId);
+  const end = setLocalHour(endDay, 17, 0, timezoneId);
 
   return { start, end };
 }
@@ -409,14 +472,16 @@ function buildSearchWindow(fromDate, businessDays = 5, timezoneId = 'UTC') {
  */
 function setLocalHour(date, hour, minute, timezoneId) {
   // Get the local calendar date (YYYY-MM-DD) in the target timezone
-  const localDate = new Intl.DateTimeFormat('en-CA', {
+  const localDate = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezoneId,
-    year: 'numeric', month: '2-digit', day: '2-digit',
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   }).format(date); // "2026-05-25"
 
   // Build a naive UTC instant treating that local time as if it were UTC
   const naiveUtc = new Date(
-    `${localDate}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00Z`
+    `${localDate}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00Z`,
   );
 
   // Compute the actual TZ offset at that moment and shift accordingly
@@ -429,17 +494,30 @@ function setLocalHour(date, hour, minute, timezoneId) {
  * at the given `date`. Positive for UTC-X zones (e.g. EDT = +14 400 000 ms).
  */
 function getTimezoneOffsetMs(date, timezoneId) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone:  timezoneId,
-    year: 'numeric', month: 'numeric', day: 'numeric',
-    hour: 'numeric', minute: 'numeric', second: 'numeric',
-    hourCycle: 'h23',
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezoneId,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hourCycle: "h23",
   }).formatToParts(date);
 
   const p = Object.fromEntries(
-    parts.filter((x) => x.type !== 'literal').map((x) => [x.type, parseInt(x.value, 10)])
+    parts
+      .filter((x) => x.type !== "literal")
+      .map((x) => [x.type, parseInt(x.value, 10)]),
   );
-  const localAsUtcMs = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  const localAsUtcMs = Date.UTC(
+    p.year,
+    p.month - 1,
+    p.day,
+    p.hour,
+    p.minute,
+    p.second,
+  );
   return date.getTime() - localAsUtcMs;
 }
 
@@ -466,18 +544,18 @@ function setUtcHour(date, hour) {
  * @param  {object|null} intersection  Output of computeIntersection(), or null
  * @returns {{ start: Date, end: Date }}
  */
-function buildNearWindow(fromDate, timezoneId = 'UTC', intersection = null) {
+function buildNearWindow(fromDate, timezoneId = "UTC", intersection = null) {
   const startDay = addBusinessDays(new Date(fromDate), 2);
-  const endDay   = addBusinessDays(new Date(fromDate), 4);
+  const endDay = addBusinessDays(new Date(fromDate), 4);
   if (intersection) {
     return {
       start: setUtcHour(startDay, intersection.workdayStartHour),
-      end:   setUtcHour(endDay,   intersection.workdayEndHour),
+      end: setUtcHour(endDay, intersection.workdayEndHour),
     };
   }
   return {
-    start: setLocalHour(startDay, 9,  0, timezoneId),
-    end:   setLocalHour(endDay,   17, 0, timezoneId),
+    start: setLocalHour(startDay, 9, 0, timezoneId),
+    end: setLocalHour(endDay, 17, 0, timezoneId),
   };
 }
 
@@ -493,18 +571,18 @@ function buildNearWindow(fromDate, timezoneId = 'UTC', intersection = null) {
  * @param  {object|null} intersection  Output of computeIntersection(), or null
  * @returns {{ start: Date, end: Date }}
  */
-function buildFarWindow(fromDate, timezoneId = 'UTC', intersection = null) {
+function buildFarWindow(fromDate, timezoneId = "UTC", intersection = null) {
   const startDay = addBusinessDays(new Date(fromDate), 5);
-  const endDay   = addBusinessDays(new Date(fromDate), 9);
+  const endDay = addBusinessDays(new Date(fromDate), 9);
   if (intersection) {
     return {
       start: setUtcHour(startDay, intersection.workdayStartHour),
-      end:   setUtcHour(endDay,   intersection.workdayEndHour),
+      end: setUtcHour(endDay, intersection.workdayEndHour),
     };
   }
   return {
-    start: setLocalHour(startDay, 9,  0, timezoneId),
-    end:   setLocalHour(endDay,   17, 0, timezoneId),
+    start: setLocalHour(startDay, 9, 0, timezoneId),
+    end: setLocalHour(endDay, 17, 0, timezoneId),
   };
 }
 
@@ -526,9 +604,15 @@ function buildFarWindow(fromDate, timezoneId = 'UTC', intersection = null) {
  */
 const IMMEDIATE_START_BUFFER_MINUTES = 30;
 
-function buildImmediateWindow(fromDate, timezoneId = 'UTC', intersection = null) {
-  const buffered = new Date(fromDate.getTime() + IMMEDIATE_START_BUFFER_MINUTES * 60 * 1000);
-  const start     = roundUpToInterval(buffered, 30);
+function buildImmediateWindow(
+  fromDate,
+  timezoneId = "UTC",
+  intersection = null,
+) {
+  const buffered = new Date(
+    fromDate.getTime() + IMMEDIATE_START_BUFFER_MINUTES * 60 * 1000,
+  );
+  const start = roundUpToInterval(buffered, 30);
 
   // Reuse buildNearWindow's own start value as our end — guarantees
   // contiguity by construction rather than re-deriving the same moment
@@ -581,32 +665,39 @@ function addBusinessDays(date, n) {
  *   message is visible only to the requester (used for the ephemeral reschedule flow).
  * @returns {object[]}  Slack blocks array
  */
-function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC', testMode = false, opts = {}) {
+function buildSuggestionsMessage(
+  slots,
+  matchId,
+  timezoneId = "UTC",
+  testMode = false,
+  opts = {},
+) {
   const tzAbbr = getTzAbbr(slots[0].start, timezoneId);
 
   const buttons = slots.map((slot, i) => ({
-    type: 'button',
+    type: "button",
     text: {
-      type:  'plain_text',
-      text:  formatSlotLabel(slot, timezoneId),
+      type: "plain_text",
+      text: formatSlotLabel(slot, timezoneId),
       emoji: false,
     },
     // Value encodes all info needed to book the slot in Step 6:
     //   "<ISO start>|<ISO end>|<matchId>"
-    value:     `${slot.start.toISOString()}|${slot.end.toISOString()}|${matchId}`,
+    value: `${slot.start.toISOString()}|${slot.end.toISOString()}|${matchId}`,
     action_id: `watercooler_book_slot_${i}`,
-    style:     'primary',
+    style: "primary",
   }));
 
   // Slack caps `actions` blocks at 5 elements — split into groups so rich
   // mode's up-to-9 buttons render across multiple blocks. A 3-button set
   // (standard mode) still produces exactly one block, unchanged from before.
   const buttonGroups = [];
-  for (let i = 0; i < buttons.length; i += 5) buttonGroups.push(buttons.slice(i, i + 5));
+  for (let i = 0; i < buttons.length; i += 5)
+    buttonGroups.push(buttons.slice(i, i + 5));
 
   const headline =
-    '📅 *Here are some times that work for everyone!*\n' +
-    'Click a slot to book it — a calendar invite and Teams meeting link will be sent to everyone.';
+    "📅 *Here are some times that work for everyone!*\n" +
+    "Click a slot to book it — a calendar invite and Teams meeting link will be sent to everyone.";
 
   const footer = opts.privateNote
     ? `_All times in ${tzAbbr}. Only you can see this — your match will be notified once you book a time._`
@@ -614,18 +705,22 @@ function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC', testMode = 
 
   return [
     {
-      type: 'section',
-      text: { type: 'mrkdwn', text: headline },
+      type: "section",
+      text: { type: "mrkdwn", text: headline },
     },
-    ...buttonGroups.map((group) => ({ type: 'actions', elements: group })),
+    ...buttonGroups.map((group) => ({ type: "actions", elements: group })),
     {
-      type: 'context',
+      type: "context",
       elements: [
-        { type: 'mrkdwn', text: footer },
-        ...(testMode ? [{
-          type: 'mrkdwn',
-          text: '_🧪 Test run — please click a slot to help us test the booking flow! No real meeting required._',
-        }] : []),
+        { type: "mrkdwn", text: footer },
+        ...(testMode
+          ? [
+              {
+                type: "mrkdwn",
+                text: "_🧪 Test run — please click a slot to help us test the booking flow! No real meeting required._",
+              },
+            ]
+          : []),
       ],
     },
   ];
@@ -639,22 +734,22 @@ function buildSuggestionsMessage(slots, matchId, timezoneId = 'UTC', testMode = 
  *
  * Uses Intl.DateTimeFormat (Node built-in) for timezone-aware formatting.
  */
-function formatSlotLabel(slot, timezoneId = 'UTC') {
-  const startStr = new Intl.DateTimeFormat('en-US', {
+function formatSlotLabel(slot, timezoneId = "UTC") {
+  const startStr = new Intl.DateTimeFormat("en-US", {
     timeZone: timezoneId,
-    weekday:  'short',
-    month:    'short',
-    day:      'numeric',
-    hour:     'numeric',
-    minute:   '2-digit',
-    hour12:   true,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   }).format(slot.start);
 
-  const endStr = new Intl.DateTimeFormat('en-US', {
+  const endStr = new Intl.DateTimeFormat("en-US", {
     timeZone: timezoneId,
-    hour:     'numeric',
-    minute:   '2-digit',
-    hour12:   true,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   }).format(slot.end);
 
   const abbr = getTzAbbr(slot.start, timezoneId);
@@ -665,9 +760,14 @@ function formatSlotLabel(slot, timezoneId = 'UTC') {
  * Returns the short timezone abbreviation for a given date, e.g. "EDT", "CST".
  */
 function getTzAbbr(date, timezoneId) {
-  return new Intl.DateTimeFormat('en-US', { timeZone: timezoneId, timeZoneName: 'short' })
-    .formatToParts(date)
-    .find((p) => p.type === 'timeZoneName')?.value ?? timezoneId;
+  return (
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timezoneId,
+      timeZoneName: "short",
+    })
+      .formatToParts(date)
+      .find((p) => p.type === "timeZoneName")?.value ?? timezoneId
+  );
 }
 
 // ── Display timezone helper ───────────────────────────────────────────────────
