@@ -61,7 +61,7 @@ async function suggestMeetingTimes(
   testMode = false,
   options = {},
 ) {
-  // ──  Guard: feature flags  ──────────────────────────────────────────────────
+  // ── Guard: feature flags ──────────────────────────────────────────────────
   if (!settings.calendar_enabled) return;
 
   const graphClient = getGraphClient();
