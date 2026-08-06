@@ -15,7 +15,7 @@
 // Snooze also pauses the user who clicked the button (equivalent to
 // running /watercooler pause themselves).
 
-const { saveFeedback, getMatch }  = require('../../lib/rounds');
+const { saveFeedback }  = require('../../lib/rounds');
 const { getUserBySlackId, updateUser } = require('../../lib/users');
 
 // ── Handlers ──────────────────────────────────────────────────────────────────

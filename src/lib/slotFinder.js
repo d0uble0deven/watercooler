@@ -151,6 +151,11 @@ function overlapsAny(slotStart, slotEnd, busySlots) {
  * @param {number} maxCount        How many slots to return
  * @param {string} timezoneId      IANA timezone for prime-time classification
  * @param {number} minGapMinutes   Minimum gap between slot start times (default 0)
+ * @param {object} [options]       Optional hour-window overrides
+ * @param {number} [options.primeStartHour=11]   Prime-window start hour
+ * @param {number} [options.primeEndHour=15]     Prime-window end hour
+ * @param {number} [options.workdayStartHour=9]  Workday start hour
+ * @param {number} [options.workdayEndHour=17]   Workday end hour
  * @returns {Array<{start: Date, end: Date}>}  Chronologically ordered
  */
 function findSlotsWithPrimePreference(

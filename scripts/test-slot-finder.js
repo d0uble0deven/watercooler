@@ -119,7 +119,6 @@ console.log('\nfindSlots() — partial overlap still blocks slot');
   // 11:30–12:00: overlaps 10:15–11:15? 11:30 < 11:15? NO → free ✓
   const data  = [userData('alice@co.com', [busy(mon(10,15), mon(11,15))])];
   const slots = findSlots(data, DAY_START, DAY_END, DURATION);
-  const startTimes = slots.map((s) => s.start.getUTCHours() + ':' + String(s.start.getUTCMinutes()).padStart(2,'0'));
   check('9:00 is free (before busy)',         slots.some((s) => s.start.getTime() === mon(9).getTime()));
   check('10:00 is blocked (partial overlap)', !slots.some((s) => s.start.getTime() === mon(10).getTime()));
   check('10:30 is blocked (partial overlap)', !slots.some((s) => s.start.getTime() === mon(10,30).getTime()));

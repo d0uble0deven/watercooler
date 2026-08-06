@@ -16,7 +16,6 @@
 const { getGraphClient } = require('../../integrations/msGraph');
 const {
   getMatchUsers,
-  getSettings,
   getRoundById,
   getMostRecentActiveRound,
   getMatchesForRound,
@@ -47,7 +46,6 @@ async function cancelRound(command, args, respond, client) {
   }
 
   const matches     = getMatchesForRound(round.id);
-  const settings    = getSettings();
   const graphClient = getGraphClient(); // may be null — event deletion is best-effort
 
   await respond(`⏳ Cancelling round #${round.id} (${matches.length} match(es))...`);

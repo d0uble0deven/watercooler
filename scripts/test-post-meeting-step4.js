@@ -23,7 +23,7 @@ if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
 
 const { initDb }    = require('../src/db/init');
 const { getDb }     = require('../src/db/connection');
-const { saveFeedback, getMatch } = require('../src/lib/rounds');
+const { saveFeedback } = require('../src/lib/rounds');
 const {
   handleMeetingGood,
   handleMeetingMeh,

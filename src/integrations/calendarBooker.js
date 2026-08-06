@@ -99,6 +99,7 @@ async function bookMeeting(
  * @param {{ start: Date, end: Date, teamsLink: string|null }} booking
  * @param {object[]} users         Match participants
  * @param {string}   timezoneId    IANA timezone for display (e.g. 'America/New_York')
+ * @param {number|null} [matchId]  Match ID for optional Reschedule button
  * @returns {object[]}             Slack blocks array
  */
 function buildConfirmationMessage(

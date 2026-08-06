@@ -20,7 +20,6 @@ const config = require("../config");
 const { getGraphClient } = require("./msGraph");
 const { getFreeBusy } = require("./calendarReader");
 const {
-  findSlots,
   findSlotsWithPrimePreference,
 } = require("../lib/slotFinder");
 const { saveUserEmail, saveUserTimezone, updateUser } = require("../lib/users");

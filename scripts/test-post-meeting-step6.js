@@ -18,7 +18,6 @@ const dbPath = process.env.DATABASE_PATH;
 if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
 
 const { initDb }        = require('../src/db/init');
-const { getDb }         = require('../src/db/connection');
 const { getSettings, updateSettings } = require('../src/lib/rounds');
 const set               = require('../src/commands/admin/set');
 const showSettings      = require('../src/commands/admin/show-settings');
