@@ -29,7 +29,7 @@
 const config           = require('../../config');
 const { getGraphClient } = require('../../integrations/msGraph');
 const { bookMeeting, buildConfirmationMessage, buildAlreadyBookedMessage } = require('../../integrations/calendarBooker');
-const { getMatch, getMatchUsers, saveBooking, claimBooking, releaseBookingClaim, saveMeetingTimes, getSettings, clearPreviousEvent } = require('../../lib/rounds');
+const { getMatch, getMatchUsers, saveBooking, claimBooking, releaseBookingClaim, saveMeetingTimes, clearPreviousEvent } = require('../../lib/rounds');
 const { assignFunFact } = require('../../lib/funFacts');
 
 /**
@@ -156,7 +156,6 @@ async function handleBookSlot({ action, ack, body, client, respond }) {
   }
 
   // ── Show the confirmation ──────────────────────────────────────────────────
-  const settings = getSettings();
   const timezone = config.calendarTimezone;
   const blocks   = buildConfirmationMessage(booking, users, timezone, matchId);
 

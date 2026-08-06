@@ -12,7 +12,6 @@
 
 const { getGraphClient, hasAzureCredentials } = require('../../integrations/msGraph');
 const { getSettings }                         = require('../../lib/rounds');
-const config                                  = require('../../config');
 
 async function calendarStatus(command, respond) {
 

@@ -76,13 +76,6 @@ async function main() {
   console.log('\ncalendar-status — partial credentials (only tenant ID set)');
   {
     process.env.AZURE_TENANT_ID = 'fake-tenant-id';
-    // Force config to re-read — config is cached so we test the module directly
-    const partialConfig = {
-      azureTenantId:     'fake-tenant-id',
-      azureClientId:     null,
-      azureClientSecret: null,
-    };
-    const { hasAzureCredentials: check2 } = require('../src/integrations/msGraph');
     // Config is already loaded with null values — partial check via direct logic
     check('null client ID → hasAzureCredentials false',
       !('fake-tenant-id' && null && null)

@@ -37,7 +37,10 @@ async function openGroupDm(client, slackUserIds) {
  * Posts the Watercooler intro message into a DM channel.
  * Required scope: chat:write
  *
- * @param {boolean} testMode  When true, appends a "this is a test" note
+ * @param {object}   client    Bolt Web API client
+ * @param {string}   channelId Slack channel ID (DM or group DM)
+ * @param {object[]} users     Matched user rows (expects display_name)
+ * @param {boolean}  testMode  When true, appends a "this is a test" note
  */
 async function postIntroMessage(client, channelId, users, testMode = false) {
   const text = buildIntroMessage(users, testMode);

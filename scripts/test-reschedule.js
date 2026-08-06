@@ -54,11 +54,6 @@ const fakeBooking = {
 
 const fakeUsers = [{ display_name: 'Alice' }, { display_name: 'Bob' }];
 
-function captureRespond() {
-  const msgs = [];
-  return { msgs, respond: async (m) => msgs.push(m) };
-}
-
 // Build a minimal action body for Bolt action handlers.
 // Includes body.user.id — real Slack always sends it, and the reschedule flow
 // needs it to know who to show the private (ephemeral) options to.

@@ -20,7 +20,6 @@ const {
 const {
   buildNearWindow,
   buildFarWindow,
-  addBusinessDays,
 } = require('../src/integrations/calendarScheduler');
 
 let passed = 0;
@@ -59,14 +58,6 @@ function win(startDay, startHour, endDay, endHour) {
 
 // Build noBusy data (everyone is free)
 const noBusy = [];
-
-// Build busy data that blocks a specific hour
-function busyAt(dayOffset, startHour, endHour) {
-  return [{ email: 'a@test.com', busySlots: [{
-    start: utcDate(dayOffset, startHour),
-    end:   utcDate(dayOffset, endHour),
-  }] }];
-}
 
 console.log('\n=== Slot Distribution Tests ===\n');
 

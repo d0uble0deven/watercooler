@@ -142,8 +142,6 @@ async function runAll() {
     db.prepare(`INSERT OR REPLACE INTO exclusions (slack_user_id, reason, created_by) VALUES ('U_RUN_7', 'test', 'U_RUN_ADMIN')`).run();
     insertUser('U_RUN_7', 'Grace');        // admin-excluded — should be excluded
 
-    const beforeRounds = db.prepare('SELECT COUNT(*) AS n FROM rounds').get().n;
-
     await run(mockCmd(), respond, mockClient);
 
     const round = db.prepare("SELECT * FROM rounds WHERE created_by = 'U_RUN_ADMIN' ORDER BY id DESC LIMIT 1").get();
