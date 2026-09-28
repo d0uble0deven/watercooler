@@ -418,9 +418,19 @@ function getAllUnbookedMatches() {
  *   - Are NOT already booked
  *   - Haven't already received the "no shared free slots" notice
  *   - Belong to a completed round older than the deadline
+ *
+ * Both sides of the time comparison go through SQLite's datetime() because
+ * completed_at is stored as "YYYY-MM-DD HH:MM:SS" while the cutoff is a JS
+ * ISO string ("YYYY-MM-DDTHH:MM:SS.sssZ"). Compared as raw text, the space
+ * sorts before "T", so a match became due as soon as the cutoff reached
+ * 00:00 UTC of the round's date — i.e. at (that midnight + deadline), which
+ * is midnight Eastern and ~13h early for a 52h deadline started at 9 AM.
+ *
+ * @param {number} deadlineHours
+ * @param {Date}   [now=new Date()]  Injectable for tests
  */
-function getUnbookedMatchesPastDeadline(deadlineHours) {
-  const cutoff = new Date(Date.now() - deadlineHours * 60 * 60 * 1000).toISOString();
+function getUnbookedMatchesPastDeadline(deadlineHours, now = new Date()) {
+  const cutoff = new Date(now.getTime() - deadlineHours * 60 * 60 * 1000).toISOString();
   return getDb()
     .prepare(`
       SELECT m.*
@@ -431,7 +441,7 @@ function getUnbookedMatchesPastDeadline(deadlineHours) {
         AND  m.slack_dm_channel_id   IS NOT NULL
         AND  m.no_slots_notified_at  IS NULL
         AND  r.status = 'completed'
-        AND  r.completed_at < ?
+        AND  datetime(r.completed_at) < datetime(?)
     `)
     .all(cutoff);
 }
