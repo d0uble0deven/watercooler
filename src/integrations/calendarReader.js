@@ -14,6 +14,14 @@
 // 'free' and 'workingElsewhere' are treated as available.
 const BLOCKING = new Set(['busy', 'tentative', 'oof']);
 
+// Tentative blocks at least this long are all-day or multi-day entries, not
+// real meetings — typically company-wide invites nobody has answered yet,
+// which Outlook shows as tentative. Round 10 (Sep 2026) lost 13 of 17 match
+// suggestions to two such invites spanning the entire search window.
+// 23h rather than 24h so an all-day event on a spring-forward DST day counts.
+// busy and oof blocks are never skipped: a multi-day OOF is a real absence.
+const ALL_DAY_TENTATIVE_MS = 23 * 60 * 60 * 1000;
+
 /**
  * Fetches the busy/free schedule for a list of user email addresses
  * within a given time window.
@@ -77,6 +85,8 @@ function toGraphDateTime(date) {
  *
  * Graph may return up to 7 decimal places on seconds (e.g. "10:00:00.0000000")
  * — the JS Date constructor handles that correctly.
+ *
+ * All-day and multi-day tentative entries are dropped (see ALL_DAY_TENTATIVE_MS).
  */
 function parseResponse(response) {
   const items = response?.value ?? [];
@@ -89,7 +99,8 @@ function parseResponse(response) {
         start:  new Date(s.start.dateTime + 'Z'),
         end:    new Date(s.end.dateTime   + 'Z'),
         status: (s.status).toLowerCase(),
-      })),
+      }))
+      .filter((s) => !(s.status === 'tentative' && s.end - s.start >= ALL_DAY_TENTATIVE_MS)),
   }));
 }
 

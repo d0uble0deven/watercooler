@@ -35,7 +35,9 @@ const { saveSuggestionTs } = require("../lib/rounds");
  *   - calendar_enabled is false in DB settings
  *   - Azure credentials are missing
  *   - Any participant's email cannot be resolved
- *   - No shared free slots are found in the search window
+ *
+ * When no shared free slots are found, posts a short notice instead of buttons
+ * (privately to the requester in private mode) so the group isn't left waiting.
  *
  * @param {object}   client     Bolt Web API client
  * @param {string}   channelId  Slack DM channel ID for this match group
@@ -168,8 +170,9 @@ async function suggestMeetingTimes(
 
   if (slots.length === 0) {
     console.log(
-      `[calendarScheduler] No shared free slots found for match ${matchId} — skipping suggestions.`,
+      `[calendarScheduler] No shared free slots found for match ${matchId} — posting no-slots notice.`,
     );
+    await postNoSlotsNotice(client, channelId, matchId, users.length, testMode, options);
     return;
   }
 
@@ -218,6 +221,68 @@ async function suggestMeetingTimes(
       err.message,
     );
   }
+}
+
+// ── No-slots notice ───────────────────────────────────────────────────────────
+
+/**
+ * Tells the group (or, in private mode, just the requester) that no shared
+ * time was found. Before this existed the function returned silently, so a
+ * pair saw the intro and then nothing until the booking deadline.
+ *
+ * Deliberately does NOT save a suggestion ts: this message has no buttons, so
+ * list-matches must not report "awaiting slot choice" and the auto-booker must
+ * not chat.update it. The auto-booker still retries at the deadline as normal.
+ */
+async function postNoSlotsNotice(client, channelId, matchId, groupSize, testMode, options) {
+  const isPrivate = !!options.privateToUserId;
+  const blocks = buildNoSlotsNotice(groupSize, { isPrivate, testMode });
+  const text = "🗓️ I couldn't find a shared free time.";
+
+  try {
+    if (isPrivate) {
+      await client.chat.postEphemeral({ channel: channelId, user: options.privateToUserId, text, blocks });
+    } else {
+      await client.chat.postMessage({ channel: channelId, text, blocks });
+    }
+  } catch (err) {
+    console.error(
+      `[calendarScheduler] Failed to post no-slots notice for match ${matchId}:`,
+      err.message,
+    );
+  }
+}
+
+/**
+ * Block Kit for the no-slots notice.
+ *
+ * @param {number}  groupSize            Participants in the match (2 → "both", 3+ → "all")
+ * @param {object}  [opts]
+ * @param {boolean} [opts.isPrivate]     Reschedule flow — only the requester sees it
+ * @param {boolean} [opts.testMode]      Adds the test-run disclaimer
+ * @returns {object[]}
+ */
+function buildNoSlotsNotice(groupSize, { isPrivate = false, testMode = false } = {}) {
+  const everyone = groupSize > 2 ? "all" : "both";
+
+  const body = isPrivate
+    ? `🗓️ *I couldn't find a time you're ${everyone} free in the next two weeks.*\n` +
+      "Nothing has changed — your match hasn't been notified, and any meeting you " +
+      "already had is still booked. Try again in a few days, or agree on a time in this chat."
+    : `🗓️ *I couldn't find a time you're ${everyone} free in the next two weeks* — ` +
+      "someone may be out of office or booked solid.\n" +
+      "Agree on a time right here in this chat, or run `/watercooler reschedule` " +
+      "later for fresh options once calendars open up.";
+
+  return [
+    { type: "section", text: { type: "mrkdwn", text: body } },
+    ...(testMode
+      ? [{
+          type: "context",
+          elements: [{ type: "mrkdwn", text: "_🧪 Test run — no real meeting required._" }],
+        }]
+      : []),
+  ];
 }
 
 // ── Email resolution ──────────────────────────────────────────────────────────
@@ -797,6 +862,7 @@ module.exports = {
   buildFarWindow,
   buildImmediateWindow,
   buildSuggestionsMessage,
+  buildNoSlotsNotice,
   formatSlotLabel,
   // Exported for testing
   nextBusinessDay,

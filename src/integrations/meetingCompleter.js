@@ -170,12 +170,18 @@ function buildRoundSummaryMessage(matchCount, nextRoundDate, tz) {
  *   - Have no DM channel to post into
  *   - Belong to a round that isn't 'completed'
  *
+ * Track B normalises both sides with datetime(): completed_at is stored as
+ * "YYYY-MM-DD HH:MM:SS" but the cutoff is an ISO string, and as raw text the
+ * space sorts before "T" — making Track B fire up to a day early. (Track A is
+ * fine as-is: meeting_end_at and `now` are both ISO strings.)
+ *
  * @param {number} fallbackBusinessDays
+ * @param {Date}   [nowDate=new Date()]  Injectable for tests
  * @returns {object[]}  Match rows
  */
-function getMatchesDueForCompletion(fallbackBusinessDays) {
-  const now           = new Date().toISOString();
-  const fallbackCutoff = subtractBusinessDays(new Date(), fallbackBusinessDays).toISOString();
+function getMatchesDueForCompletion(fallbackBusinessDays, nowDate = new Date()) {
+  const now           = nowDate.toISOString();
+  const fallbackCutoff = subtractBusinessDays(nowDate, fallbackBusinessDays).toISOString();
 
   return getDb().prepare(`
     SELECT m.*
@@ -189,7 +195,7 @@ function getMatchesDueForCompletion(fallbackBusinessDays) {
         (m.meeting_end_at IS NOT NULL AND m.meeting_end_at < ?)
         OR
         -- Track B: no Slack booking, fallback window has elapsed
-        (m.meeting_end_at IS NULL AND r.completed_at < ?)
+        (m.meeting_end_at IS NULL AND datetime(r.completed_at) < datetime(?))
       )
   `).all(now, fallbackCutoff);
 }
