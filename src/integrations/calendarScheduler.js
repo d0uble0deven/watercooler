@@ -3,9 +3,14 @@
 // Orchestrates the calendar-suggestion flow for a match group:
 //
 //   1. Resolve each participant's email (from DB cache or Slack users.info).
-//   2. Query Microsoft Graph for free/busy data over the next 5 business days.
-//   3. Find up to 3 slots when everyone is free.
-//   4. Post an interactive Block Kit message with booking buttons to the match DM.
+//   2. Query Microsoft Graph for free/busy data (PTO-aware — see calendarReader).
+//   3. Find times when everyone is free, in one of two modes:
+//        • Starter suggestions (default): 3 slots over the next two weeks,
+//          midday preferred, posted publicly in the match DM.
+//        • Private full list (options.browse): every open half-hour from now
+//          until the round ends, grouped by week and day, shown only to the
+//          person who asked (Reschedule, decline nudge).
+//   4. Post an interactive Block Kit message with booking buttons.
 //
 // The `suggestMeetingTimes` entry point is called by `admin/run.js` right after
 // the intro DM is sent. Every failure mode is caught and logged — a calendar
@@ -20,8 +25,10 @@ const config = require("../config");
 const { getGraphClient } = require("./msGraph");
 const { getFreeBusy } = require("./calendarReader");
 const {
+  findSlots,
   findSlotsWithPrimePreference,
 } = require("../lib/slotFinder");
+const { localDateKey, addDaysToKey } = require("../lib/timezone");
 const { saveUserEmail, saveUserTimezone, updateUser } = require("../lib/users");
 const { saveSuggestionTs } = require("../lib/rounds");
 
@@ -46,12 +53,15 @@ const { saveSuggestionTs } = require("../lib/rounds");
  * @param {object}   settings   App settings row (calendar_enabled, meeting_duration)
  * @param {boolean}  testMode   When true, adds a test disclaimer to the posted message
  * @param {object}   [options]
- * @param {boolean}  [options.richVariety=false]  When true, offers up to 9 slots
- *   spanning "later today" through next week (used by reschedule / decline-nudge)
- *   instead of the standard 3-slot spread used for the initial round suggestion.
- * @param {string}   [options.privateToUserId]  When set, posts the slots as an
- *   ephemeral message visible ONLY to that user. Used by the reschedule flow so
- *   the match partner isn't notified until a new time is actually booked.
+ * @param {boolean}  [options.browse=false]  Private full list instead of the 3
+ *   starter suggestions: every open half-hour from ~now until options.roundEnd.
+ * @param {string}   [options.privateToUserId]  Who sees the private list — posted
+ *   as an ephemeral message visible ONLY to that user, so the match partner
+ *   isn't notified until a new time is actually booked. Setting it always
+ *   selects the private list; private requests never post publicly.
+ * @param {Date}     [options.roundEnd]  When the match's round ends (see
+ *   lib/roundSchedule). The private list stops there; if it's missing or
+ *   already past, the list covers the next two weeks instead.
  */
 async function suggestMeetingTimes(
   client,
@@ -104,53 +114,43 @@ async function suggestMeetingTimes(
     );
   }
 
-  // ── Build search windows ──────────────────────────────────────────────────
-  // Immediate (rich mode only): now → start of the near window — "later today"
-  //   through the next business day. Contiguous with near (no gap, no overlap).
-  // Near: +2 to +4 business days (e.g. Mon match → Wed–Fri same week)
-  // Far:  +5 to +9 business days (e.g. Mon match → following Mon–Fri)
-  // When an intersection is available the windows start/end at the shared UTC
-  // hours rather than 9 AM / 5 PM in the org timezone.
-  const richVariety = options.richVariety === true;
-  const near = buildNearWindow(new Date(), orgTz, intersection);
-  const far = buildFarWindow(new Date(), orgTz, intersection);
-  const immediate = richVariety
-    ? buildImmediateWindow(new Date(), orgTz, intersection)
-    : null;
-
-  // ── Free/busy query (single call covers every window in use) ─────────────
-  const queryStart = richVariety ? immediate.start : near.start;
-  const busyData = await getFreeBusy(graphClient, emails, queryStart, far.end);
-
-  // ── Slot finding ──────────────────────────────────────────────────────────
-  // Standard mode (initial round suggestion — unchanged):
-  //   2 slots from the near window, 1 from the far window. 3 total.
-  // Rich mode (reschedule / decline nudge — more slots, more spread):
-  //   up to 3 slots from each of immediate / near / far. Up to 9 total.
   // With an intersection: checks run in UTC using computed UTC hour bounds.
   // Without one: checks run in orgTz with standard 9–17 / 11–15 defaults.
   const durationMinutes = settings.meeting_duration ?? 30;
   const slotTz = intersection?.timezoneId ?? orgTz;
   const slotOptions = intersection ?? {};
+  // Display times in the shared local timezone when everyone is co-located
+  // (e.g. two Chicago users see CDT, not EDT). Mixed timezones fall back to orgTz.
+  const displayTz = pickDisplayTimezone(participantTzs, orgTz);
 
-  const immediateSlots = richVariety
-    ? findSlotsWithPrimePreference(
-        busyData,
-        immediate.start,
-        immediate.end,
-        durationMinutes,
-        3,
-        slotTz,
-        60,
-        slotOptions,
-      )
-    : [];
+  // ── Private full list (Reschedule, decline nudge) — its own path ──────────
+  if (options.browse === true || options.privateToUserId) {
+    await postBrowseOptions({
+      client, channelId, matchId, users, emails, graphClient,
+      durationMinutes, slotTz, slotOptions, displayTz, testMode, options,
+    });
+    return;
+  }
+
+  // ── Starter suggestions: build search windows ─────────────────────────────
+  // Near: +2 to +4 business days (e.g. Mon match → Wed–Fri same week)
+  // Far:  +5 to +9 business days (e.g. Mon match → following Mon–Fri)
+  // When an intersection is available the windows start/end at the shared UTC
+  // hours rather than 9 AM / 5 PM in the org timezone.
+  const near = buildNearWindow(new Date(), orgTz, intersection);
+  const far = buildFarWindow(new Date(), orgTz, intersection);
+
+  // ── Free/busy query (single call covers both windows) ─────────────────────
+  const busyData = await getFreeBusy(graphClient, emails, near.start, far.end);
+
+  // ── Slot finding: 2 from the near window, 1 from the far one ─────────────
+  // Midday ("prime time") slots preferred — for these 3 suggestions only.
   const nearSlots = findSlotsWithPrimePreference(
     busyData,
     near.start,
     near.end,
     durationMinutes,
-    richVariety ? 3 : 2,
+    2,
     slotTz,
     120,
     slotOptions,
@@ -160,13 +160,13 @@ async function suggestMeetingTimes(
     far.start,
     far.end,
     durationMinutes,
-    richVariety ? 3 : 1,
+    1,
     slotTz,
     0,
     slotOptions,
   );
 
-  const slots = [...immediateSlots, ...nearSlots, ...farSlots];
+  const slots = [...nearSlots, ...farSlots];
 
   if (slots.length === 0) {
     console.log(
@@ -177,34 +177,11 @@ async function suggestMeetingTimes(
   }
 
   // ── Post interactive message ──────────────────────────────────────────────
-  // Display times in the shared local timezone when everyone is co-located
-  // (e.g. two Chicago users see CDT, not EDT). Mixed timezones fall back to orgTz.
-  const displayTz = pickDisplayTimezone(participantTzs, orgTz);
-  const blocks = buildSuggestionsMessage(slots, matchId, displayTz, testMode, {
-    privateNote: !!options.privateToUserId,
-  });
+  const blocks = buildSuggestionsMessage(slots, matchId, displayTz, testMode);
 
   const fallbackText = "📅 Here are some times that work for your meeting!"; // for notifications
 
   try {
-    if (options.privateToUserId) {
-      // Ephemeral — only the requester sees these options. Their match partner
-      // finds out when a new time is actually booked, not before.
-      await client.chat.postEphemeral({
-        channel: channelId,
-        user: options.privateToUserId,
-        text: fallbackText,
-        blocks,
-      });
-      // Deliberately NOT saving a suggestion ts: ephemeral messages return no
-      // reusable timestamp, and the auto-booker must never try to chat.update one.
-      console.log(
-        `[calendarScheduler] Posted ${slots.length} private slot suggestion(s) ` +
-          `for match ${matchId} to ${options.privateToUserId}.`,
-      );
-      return;
-    }
-
     const result = await client.chat.postMessage({
       channel: channelId,
       text: fallbackText,
@@ -236,7 +213,9 @@ async function suggestMeetingTimes(
  */
 async function postNoSlotsNotice(client, channelId, matchId, groupSize, testMode, options) {
   const isPrivate = !!options.privateToUserId;
-  const blocks = buildNoSlotsNotice(groupSize, { isPrivate, testMode });
+  const blocks = buildNoSlotsNotice(groupSize, {
+    isPrivate, testMode, roundEnd: options.roundEnd, timezoneId: options.timezoneId,
+  });
   const text = "🗓️ I couldn't find a shared free time.";
 
   try {
@@ -260,15 +239,30 @@ async function postNoSlotsNotice(client, channelId, matchId, groupSize, testMode
  * @param {object}  [opts]
  * @param {boolean} [opts.isPrivate]     Reschedule flow — only the requester sees it
  * @param {boolean} [opts.testMode]      Adds the test-run disclaimer
+ * @param {Date}    [opts.roundEnd]      Private list only: the search ran until the
+ *   round ends, so the copy names that date instead of "the next two weeks"
+ * @param {string}  [opts.timezoneId]    Timezone for that date
  * @returns {object[]}
  */
-function buildNoSlotsNotice(groupSize, { isPrivate = false, testMode = false } = {}) {
+function buildNoSlotsNotice(
+  groupSize,
+  { isPrivate = false, testMode = false, roundEnd = null, timezoneId = "UTC" } = {},
+) {
   const everyone = groupSize > 2 ? "all" : "both";
+  const roundEndLabel = roundEnd
+    ? new Intl.DateTimeFormat("en-US", {
+        timeZone: timezoneId, weekday: "short", month: "short", day: "numeric",
+      }).format(roundEnd)
+    : null;
 
   const body = isPrivate
-    ? `🗓️ *I couldn't find a time you're ${everyone} free in the next two weeks.*\n` +
-      "Nothing has changed — your match hasn't been notified, and any meeting you " +
-      "already had is still booked. Try again in a few days, or agree on a time in this chat."
+    ? (roundEndLabel
+        ? `🗓️ *I couldn't find a time you're ${everyone} free before this round wraps up on ${roundEndLabel}.*\n` +
+          "Nothing has changed — your match hasn't been notified, and any meeting you " +
+          "already had is still booked. Agree on a time in this chat if you can."
+        : `🗓️ *I couldn't find a time you're ${everyone} free in the next two weeks.*\n` +
+          "Nothing has changed — your match hasn't been notified, and any meeting you " +
+          "already had is still booked. Try again in a few days, or agree on a time in this chat.")
     : `🗓️ *I couldn't find a time you're ${everyone} free in the next two weeks* — ` +
       "someone may be out of office or booked solid.\n" +
       "Agree on a time right here in this chat, or run `/watercooler reschedule` " +
@@ -283,6 +277,257 @@ function buildNoSlotsNotice(groupSize, { isPrivate = false, testMode = false } =
         }]
       : []),
   ];
+}
+
+// ── Private full list ("browse" mode) ─────────────────────────────────────────
+
+const BROWSE_START_BUFFER_MINUTES = 30; // first time offered: ≥30 min out, on a :00/:30 mark
+const BROWSE_WEEKS_SHOWN = 2; // the first two weeks that have any open time
+const BROWSE_FALLBACK_DAYS = 14; // only when the round end is unknown or already past
+const DAY_MS = 24 * 60 * 60 * 1000;
+const SLACK_MAX_BUTTONS_PER_ROW = 25; // Block Kit limit per actions block
+
+/**
+ * Posts every shared open half-hour from ~now until the round ends, grouped by
+ * week and day, privately to options.privateToUserId. No midday preference —
+ * that's only for the 3 starter suggestions.
+ *
+ * Deliberately NOT saving a suggestion ts: ephemeral messages return no
+ * reusable timestamp, and the auto-booker must never try to chat.update one.
+ */
+async function postBrowseOptions({
+  client, channelId, matchId, users, emails, graphClient,
+  durationMinutes, slotTz, slotOptions, displayTz, testMode, options,
+}) {
+  if (!options.privateToUserId) {
+    console.error(
+      `[calendarScheduler] Private time list needs a user to show it to (match ${matchId}) — skipping.`,
+    );
+    return;
+  }
+
+  const now = new Date();
+  const start = roundUpToInterval(
+    new Date(now.getTime() + BROWSE_START_BUFFER_MINUTES * 60 * 1000), 30,
+  );
+  const roundEnd =
+    options.roundEnd instanceof Date && options.roundEnd > start ? options.roundEnd : null;
+  const end = roundEnd ?? new Date(start.getTime() + BROWSE_FALLBACK_DAYS * DAY_MS);
+
+  const busyData = await getFreeBusy(graphClient, emails, start, end);
+  const slots = findSlots(busyData, start, end, durationMinutes, {
+    workdayStartHour: slotOptions.workdayStartHour ?? 9,
+    workdayEndHour: slotOptions.workdayEndHour ?? 17,
+    slotIntervalMinutes: 30,
+    maxSlots: 10000,
+    weekdaysOnly: true,
+    timezoneId: slotTz,
+  });
+
+  const sequence = pickBrowseWeeks(slots, start, end, displayTz, BROWSE_WEEKS_SHOWN);
+  const shownSlots = sequence
+    .filter((e) => e.type === "week")
+    .flatMap((e) => e.days.flatMap((d) => d.slots));
+
+  if (shownSlots.length === 0) {
+    console.log(
+      `[calendarScheduler] No shared free slots before ${end.toISOString()} for match ${matchId} — posting no-slots notice.`,
+    );
+    await postNoSlotsNotice(client, channelId, matchId, users.length, testMode, {
+      ...options, roundEnd, timezoneId: displayTz,
+    });
+    return;
+  }
+
+  const blocks = buildBrowseMessage(sequence, matchId, displayTz, { testMode, now });
+  try {
+    await client.chat.postEphemeral({
+      channel: channelId,
+      user: options.privateToUserId,
+      text: "🗓️ Here are the times that work for everyone.",
+      blocks,
+    });
+    console.log(
+      `[calendarScheduler] Posted ${shownSlots.length} private time option(s) ` +
+        `for match ${matchId} to ${options.privateToUserId}.`,
+    );
+  } catch (err) {
+    console.error(
+      `[calendarScheduler] Failed to post time options for match ${matchId}:`,
+      err.message,
+    );
+  }
+}
+
+/**
+ * Groups slots into Monday-to-Sunday weeks (dates in `timezoneId`) and returns
+ * what to show, in order:
+ *   { type: "week", weekKey, days: [{ dayKey, slots }] }  — first `maxWeeks` weeks with open times
+ *   { type: "skipped", weekKey }                          — an empty week before the last shown one
+ * Empty weeks after the last shown week aren't worth mentioning and are dropped,
+ * as is "this week" when the list starts on a weekend.
+ *
+ * @param {Array<{start: Date, end: Date}>} slots  Chronological
+ * @param {Date}   rangeStart
+ * @param {Date}   rangeEnd
+ * @param {string} timezoneId
+ * @param {number} maxWeeks
+ */
+function pickBrowseWeeks(slots, rangeStart, rangeEnd, timezoneId, maxWeeks) {
+  const byWeek = new Map(); // weekKey → Map(dayKey → slots[])
+  for (const slot of slots) {
+    const dayKey = localDateKey(slot.start, timezoneId);
+    const weekKey = mondayOf(dayKey);
+    if (!byWeek.has(weekKey)) byWeek.set(weekKey, new Map());
+    const days = byWeek.get(weekKey);
+    if (!days.has(dayKey)) days.set(dayKey, []);
+    days.get(dayKey).push(slot);
+  }
+
+  const startDay = localDateKey(rangeStart, timezoneId);
+  const startsOnWeekend = isWeekendKey(startDay);
+  const lastDay = localDateKey(rangeEnd, timezoneId);
+
+  const sequence = [];
+  let shown = 0;
+  for (
+    let weekKey = mondayOf(startDay);
+    weekKey <= lastDay && shown < maxWeeks;
+    weekKey = addDaysToKey(weekKey, 7)
+  ) {
+    const days = byWeek.get(weekKey);
+    if (days) {
+      sequence.push({
+        type: "week",
+        weekKey,
+        days: [...days].map(([dayKey, daySlots]) => ({ dayKey, slots: daySlots })),
+      });
+      shown++;
+    } else if (!(weekKey === mondayOf(startDay) && startsOnWeekend)) {
+      sequence.push({ type: "skipped", weekKey });
+    }
+  }
+  while (sequence.length && sequence[sequence.length - 1].type === "skipped") sequence.pop();
+  return sequence;
+}
+
+/**
+ * Block Kit for the private full list: one header per week, one row per day,
+ * time-only buttons (the date is in the row label). Two full weeks come to
+ * ~24 blocks (Slack allows 50); a 9–5 day has at most 16 half-hour starts
+ * (Slack allows 25 buttons per row; longer rows wrap into another block).
+ *
+ * Buttons reuse watercooler_book_slot_<n> and the existing value format, so
+ * the booking handler treats them exactly like the starter buttons.
+ *
+ * @param {object[]} sequence  From pickBrowseWeeks (must contain a week)
+ * @param {number}   matchId
+ * @param {string}   timezoneId  Display timezone
+ * @param {object}   [opts]
+ * @param {boolean}  [opts.testMode=false]
+ * @param {Date}     [opts.now=new Date()]  For "This week" / "Next week" labels
+ * @returns {object[]}
+ */
+function buildBrowseMessage(sequence, matchId, timezoneId = "UTC", { testMode = false, now = new Date() } = {}) {
+  const firstSlot = sequence.find((e) => e.type === "week").days[0].slots[0];
+  const tzAbbr = getTzAbbr(firstSlot.start, timezoneId);
+  const thisWeek = mondayOf(localDateKey(now, timezoneId));
+  const nextWeek = addDaysToKey(thisWeek, 7);
+
+  const blocks = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `🗓️ *Pick any time that works* — all times ${tzAbbr}.\n` +
+          "_Only you can see this. Your match will be notified once you book._",
+      },
+    },
+  ];
+
+  let n = 0;
+  for (const entry of sequence) {
+    if (entry.type === "skipped") {
+      const note =
+        entry.weekKey === thisWeek
+          ? "No shared times left this week."
+          : `No shared times the week of ${formatDateKey(entry.weekKey, { month: "short", day: "numeric" })}.`;
+      blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: `_${note}_` }] });
+      continue;
+    }
+
+    const label =
+      entry.weekKey === thisWeek ? "This week"
+        : entry.weekKey === nextWeek ? "Next week"
+          : `Week of ${formatDateKey(entry.weekKey, { month: "short", day: "numeric" })}`;
+    blocks.push({
+      type: "header",
+      text: { type: "plain_text", text: `${label} · ${formatWeekRange(entry.weekKey)}` },
+    });
+
+    for (const day of entry.days) {
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*${formatDateKey(day.dayKey, { weekday: "short", month: "short", day: "numeric" })}*`,
+        },
+      });
+      for (let i = 0; i < day.slots.length; i += SLACK_MAX_BUTTONS_PER_ROW) {
+        blocks.push({
+          type: "actions",
+          elements: day.slots.slice(i, i + SLACK_MAX_BUTTONS_PER_ROW).map((slot) => ({
+            type: "button",
+            text: { type: "plain_text", text: formatTimeOnly(slot.start, timezoneId), emoji: false },
+            value: `${slot.start.toISOString()}|${slot.end.toISOString()}|${matchId}`,
+            action_id: `watercooler_book_slot_${n++}`,
+          })),
+        });
+      }
+    }
+  }
+
+  if (testMode) {
+    blocks.push({
+      type: "context",
+      elements: [{
+        type: "mrkdwn",
+        text: "_🧪 Test run — please click a slot to help us test the booking flow! No real meeting required._",
+      }],
+    });
+  }
+  return blocks;
+}
+
+// Date-key helpers ("YYYY-MM-DD" strings, which compare correctly as text).
+function mondayOf(dayKey) {
+  const weekday = new Date(`${dayKey}T12:00:00Z`).getUTCDay(); // 0 = Sunday
+  return addDaysToKey(dayKey, -((weekday + 6) % 7));
+}
+function isWeekendKey(dayKey) {
+  const weekday = new Date(`${dayKey}T12:00:00Z`).getUTCDay();
+  return weekday === 0 || weekday === 6;
+}
+/** Formats a date key; noon UTC keeps the calendar date stable in every US timezone. */
+function formatDateKey(dayKey, opts) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", ...opts }).format(
+    new Date(`${dayKey}T12:00:00Z`),
+  );
+}
+/** "Nov 16–20", or "Nov 30 – Dec 4" across a month boundary (Mon–Fri). */
+function formatWeekRange(mondayKey) {
+  const fridayKey = addDaysToKey(mondayKey, 4);
+  const from = formatDateKey(mondayKey, { month: "short", day: "numeric" });
+  return mondayKey.slice(5, 7) === fridayKey.slice(5, 7)
+    ? `${from}–${formatDateKey(fridayKey, { day: "numeric" })}`
+    : `${from} – ${formatDateKey(fridayKey, { month: "short", day: "numeric" })}`;
+}
+/** "9:30 AM" */
+function formatTimeOnly(date, timezoneId) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezoneId, hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(date);
 }
 
 // ── Email resolution ──────────────────────────────────────────────────────────
@@ -651,41 +896,6 @@ function buildFarWindow(fromDate, timezoneId = "UTC", intersection = null) {
 }
 
 /**
- * Immediate window: from `fromDate` + a short buffer through the start of the
- * near window — i.e. "later today" through the next business day. Contiguous
- * with buildNearWindow (shares the same end point), so the three tiers cover
- * "now" through +9 business days with no gap and no overlap.
- *
- * Only the START needs the buffer/rounding below — the END and the workday/
- * weekday filtering are handled entirely by findSlots' existing checks, so a
- * window that starts Friday evening naturally yields zero Friday candidates
- * and picks back up Monday morning, with no special-casing needed here.
- *
- * @param  {Date}        fromDate      Reference point (usually `new Date()`)
- * @param  {string}      timezoneId    IANA org timezone (fallback when no intersection)
- * @param  {object|null} intersection  Output of computeIntersection(), or null
- * @returns {{ start: Date, end: Date }}
- */
-const IMMEDIATE_START_BUFFER_MINUTES = 30;
-
-function buildImmediateWindow(
-  fromDate,
-  timezoneId = "UTC",
-  intersection = null,
-) {
-  const buffered = new Date(
-    fromDate.getTime() + IMMEDIATE_START_BUFFER_MINUTES * 60 * 1000,
-  );
-  const start = roundUpToInterval(buffered, 30);
-
-  // Reuse buildNearWindow's own start value as our end — guarantees
-  // contiguity by construction rather than re-deriving the same moment
-  // through parallel hour logic (which is how this went wrong the first time).
-  const { start: end } = buildNearWindow(fromDate, timezoneId, intersection);
-  return { start, end };
-}
-
-/**
  * Rounds a Date up to the next `intervalMinutes` boundary, so offered slot
  * start times land on clean marks (e.g. 2:30) instead of odd ones (2:37).
  */
@@ -724,9 +934,6 @@ function addBusinessDays(date, n) {
  * @param {number} matchId
  * @param {string}  timezoneId  IANA timezone for display (e.g. 'America/New_York')
  * @param {boolean} testMode    When true, adds a test disclaimer to the context block
- * @param {object}  [opts]
- * @param {boolean} [opts.privateNote=false]  When true, the copy reflects that this
- *   message is visible only to the requester (used for the ephemeral reschedule flow).
  * @returns {object[]}  Slack blocks array
  */
 function buildSuggestionsMessage(
@@ -734,7 +941,6 @@ function buildSuggestionsMessage(
   matchId,
   timezoneId = "UTC",
   testMode = false,
-  opts = {},
 ) {
   const tzAbbr = getTzAbbr(slots[0].start, timezoneId);
 
@@ -752,27 +958,19 @@ function buildSuggestionsMessage(
     style: "primary",
   }));
 
-  // Slack caps `actions` blocks at 5 elements — split into groups so rich
-  // mode's up-to-9 buttons render across multiple blocks. A 3-button set
-  // (standard mode) still produces exactly one block, unchanged from before.
-  const buttonGroups = [];
-  for (let i = 0; i < buttons.length; i += 5)
-    buttonGroups.push(buttons.slice(i, i + 5));
-
   const headline =
     "📅 *Here are some times that work for everyone!*\n" +
     "Click a slot to book it — a calendar invite and Teams meeting link will be sent to everyone.";
 
-  const footer = opts.privateNote
-    ? `_All times in ${tzAbbr}. Only you can see this — your match will be notified once you book a time._`
-    : `_All times in ${tzAbbr}. If none of these work, coordinate directly in this chat._`;
+  const footer = `_All times in ${tzAbbr}. If none of these work, coordinate directly in this chat._`;
 
   return [
     {
       type: "section",
       text: { type: "mrkdwn", text: headline },
     },
-    ...buttonGroups.map((group) => ({ type: "actions", elements: group })),
+    // Up to 25 buttons fit in one actions block; the starter set has 3.
+    { type: "actions", elements: buttons },
     {
       type: "context",
       elements: [
@@ -860,9 +1058,10 @@ module.exports = {
   buildSearchWindow,
   buildNearWindow,
   buildFarWindow,
-  buildImmediateWindow,
   buildSuggestionsMessage,
   buildNoSlotsNotice,
+  buildBrowseMessage,
+  pickBrowseWeeks,
   formatSlotLabel,
   // Exported for testing
   nextBusinessDay,

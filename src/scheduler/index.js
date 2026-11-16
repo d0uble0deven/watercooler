@@ -55,14 +55,17 @@ function parseTime(introTime) {
  * Returns true if enough time has passed since the last round to justify
  * running again. A ±1 day grace window tolerates server restarts or drift.
  *
- * @param {string} cadence       - 'weekly' | 'biweekly' | 'monthly'
- * @param {string|null} lastRoundDate - ISO string from the DB, or null
+ * @param {string} cadence       - 'weekly' | 'biweekly' | 'triweekly' | 'monthly'
+ * @param {string|null} lastRoundDate - started_at from the DB, or null
+ * @param {Date|number} [now=Date.now()] - Moment to evaluate at. Lets
+ *   lib/roundSchedule ask "would the scheduler run at time X?" so its
+ *   next-round dates always agree with this rule.
  */
-function shouldRunNow(cadence, lastRoundDate) {
+function shouldRunNow(cadence, lastRoundDate, now = Date.now()) {
   if (!lastRoundDate) return true; // never run before — go ahead
 
   const daysSinceLast =
-    (Date.now() - new Date(lastRoundDate).getTime()) / (1000 * 60 * 60 * 24);
+    (Number(now) - new Date(lastRoundDate).getTime()) / (1000 * 60 * 60 * 24);
 
   switch ((cadence || 'weekly').toLowerCase()) {
     case 'weekly':     return daysSinceLast >= 6;   // 7 days minus 1-day grace

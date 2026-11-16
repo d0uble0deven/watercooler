@@ -3,10 +3,10 @@
 // Reschedule variety + /watercooler reschedule command tests
 //
 // Covers:
-//   • buildImmediateWindow — contiguous with near window, buffer + rounding
-//   • suggestMeetingTimes  — default mode unchanged (3 slots); richVariety
-//     mode offers up to 9, degrades gracefully on a constrained calendar
-//   • buildSuggestionsMessage — buttons chunk into ≤5-element actions blocks
+//   • suggestMeetingTimes  — default mode unchanged (3 public slots); private
+//     requests get the full list (the old 9-slot "rich" mode is gone — the
+//     full list has its own suite: test:browse-times)
+//   • buildSuggestionsMessage — the 3 starter buttons sit in one actions block
 //   • checkRescheduleEligibility — direct unit coverage of all four statuses
 //   • getUpcomingBookedMatchForUser — soonest-first, excludes pending/past
 //   • /watercooler reschedule command — no-match, guard, and happy paths
@@ -25,8 +25,7 @@ msGraph.getGraphClient      = () => ({ api: () => ({}) }); // non-null is all su
 calendarReader.getFreeBusy  = async (...args) => busyResponder(...args);
 
 const {
-  suggestMeetingTimes, buildImmediateWindow, buildNearWindow,
-  buildSuggestionsMessage,
+  suggestMeetingTimes, buildSuggestionsMessage,
 } = require('../src/integrations/calendarScheduler');
 const { checkRescheduleEligibility } = require('../src/commands/actions/reschedule');
 const rescheduleCommand = require('../src/commands/user/reschedule');
@@ -79,24 +78,8 @@ const originalSettings = getSettings();
   saveUserEmail('U_VAR_2', 'otto@example.test');
   completeRound(roundId);
 
-  // ── buildImmediateWindow ─────────────────────────────────────────────────────
-  console.log('buildImmediateWindow');
-  {
-    const now  = new Date('2026-07-15T18:00:00Z'); // Wed, mid-afternoon US
-    const near = buildNearWindow(now, 'America/New_York', null);
-    const imm  = buildImmediateWindow(now, 'America/New_York', null);
-
-    check('end is contiguous with near window start',
-      imm.end.getTime() === near.start.getTime(),
-      { immEnd: imm.end, nearStart: near.start });
-    check('start is after "now" (buffer applied)', imm.start.getTime() > now.getTime());
-    check('start is rounded to a 30-min mark',
-      (imm.start.getTime() % (30 * 60 * 1000)) === 0, imm.start);
-    check('start is before end', imm.start.getTime() < imm.end.getTime());
-  }
-
   // ── suggestMeetingTimes — default mode unchanged ────────────────────────────
-  console.log('\nsuggestMeetingTimes — default mode (regression check)');
+  console.log('suggestMeetingTimes — default mode (regression check)');
   {
     // Wide-open calendars — plenty of room to find every requested slot.
     busyResponder = async () => [];
@@ -119,37 +102,50 @@ const originalSettings = getSettings();
     check('default mode posts exactly 3 slots', buttonCount === 3, buttonCount);
   }
 
-  // ── suggestMeetingTimes — rich mode ──────────────────────────────────────────
-  console.log('\nsuggestMeetingTimes — richVariety mode');
+  // ── suggestMeetingTimes — private requests get the full list ────────────────
+  console.log('\nsuggestMeetingTimes — private request → full list, never public');
   {
     busyResponder = async () => [];
 
     const roundId3 = createRound('test-variety');
     const matchId  = saveMatch(roundId3);
     saveMatchMembers(matchId, [u1.id, u2.id]);
-    updateMatchChannel(matchId, 'C_VAR_RICH');
+    updateMatchChannel(matchId, 'C_VAR_PRIVATE');
     completeRound(roundId3);
 
     const posts = [];
-    const client = { chat: { postMessage: async (m) => { posts.push(m); return { ts: '333.444' }; } } };
-
-    await suggestMeetingTimes(client, 'C_VAR_RICH', matchId, [
+    const ephemerals = [];
+    const client = { chat: {
+      postMessage:   async (m) => { posts.push(m); return { ts: '333.444' }; },
+      postEphemeral: async (m) => { ephemerals.push(m); return {}; },
+    } };
+    const users = [
       { ...u1, slack_email: 'vera@example.test' },
       { ...u2, slack_email: 'otto@example.test' },
-    ], getSettings(), false, { richVariety: true });
+    ];
 
-    const buttonCount = countButtons(posts[0]?.blocks);
-    check('rich mode posts up to 9 slots', buttonCount > 3 && buttonCount <= 9, buttonCount);
+    await suggestMeetingTimes(client, 'C_VAR_PRIVATE', matchId, users, getSettings(), false,
+      { browse: true, privateToUserId: 'U_VAR_1' });
+    check('browse → one private message to the requester',
+      ephemerals.length === 1 && ephemerals[0].user === 'U_VAR_1' && posts.length === 0,
+      { ephemerals: ephemerals.length, posts: posts.length });
+    check('browse → far more than 3 options on open calendars',
+      countButtons(ephemerals[0]?.blocks) > 9, countButtons(ephemerals[0]?.blocks));
 
-    const actionsBlocks = (posts[0]?.blocks || []).filter((b) => b.type === 'actions');
-    check('buttons split across multiple actions blocks when >5',
-      buttonCount <= 5 || actionsBlocks.length >= 2, actionsBlocks.length);
-    check('no single actions block exceeds 5 buttons',
-      actionsBlocks.every((b) => b.elements.length <= 5));
+    ephemerals.length = 0;
+    await suggestMeetingTimes(client, 'C_VAR_PRIVATE', matchId, users, getSettings(), false,
+      { privateToUserId: 'U_VAR_2' });
+    check('privateToUserId alone → still private (never falls back to a public post)',
+      ephemerals.length === 1 && posts.length === 0, { ephemerals: ephemerals.length, posts: posts.length });
+
+    await suggestMeetingTimes(client, 'C_VAR_PRIVATE', matchId, users, getSettings(), false,
+      { richVariety: true });
+    check('old richVariety option is ignored → standard 3 public slots',
+      posts.length === 1 && countButtons(posts[0]?.blocks) === 3, countButtons(posts[0]?.blocks));
   }
 
-  // ── buildSuggestionsMessage — chunking directly ─────────────────────────────
-  console.log('\nbuildSuggestionsMessage — button chunking');
+  // ── buildSuggestionsMessage — layout ────────────────────────────────────────
+  console.log('\nbuildSuggestionsMessage — the 3 starter buttons');
   {
     const mk = (n) => Array.from({ length: n }, (_, i) => ({
       start: new Date(Date.now() + i * 3600000),
@@ -160,17 +156,10 @@ const originalSettings = getSettings();
     const threeActions = three.filter((b) => b.type === 'actions');
     check('3 slots → exactly 1 actions block', threeActions.length === 1, threeActions.length);
     check('3 slots → 1 block has all 3 buttons', threeActions[0].elements.length === 3);
-
-    const nine = buildSuggestionsMessage(mk(9), 1, 'UTC', false);
-    const nineActions = nine.filter((b) => b.type === 'actions');
-    check('9 slots → 2 actions blocks', nineActions.length === 2, nineActions.length);
-    check('9 slots → split 5 + 4', nineActions[0].elements.length === 5 && nineActions[1].elements.length === 4,
-      nineActions.map((b) => b.elements.length));
-
-    const allButtons = nineActions.flatMap((b) => b.elements);
-    check('action_ids stay sequential across blocks (0..8)',
-      allButtons.map((b) => b.action_id).join(',') ===
-      Array.from({ length: 9 }, (_, i) => `watercooler_book_slot_${i}`).join(','));
+    check('action_ids are watercooler_book_slot_0..2',
+      threeActions[0].elements.map((b) => b.action_id).join(',') ===
+      'watercooler_book_slot_0,watercooler_book_slot_1,watercooler_book_slot_2');
+    check('starter buttons stay green (primary)', threeActions[0].elements.every((b) => b.style === 'primary'));
   }
 
   // ── checkRescheduleEligibility — direct unit coverage ───────────────────────

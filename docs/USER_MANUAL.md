@@ -107,7 +107,7 @@ Shortly after the intro DM, the bot posts a message with meeting time options ba
 
 If there's no time you're all free over the next two weeks — say someone is out of office — the bot says so instead of posting buttons. Agree on a time in the chat, or run `/watercooler reschedule` once calendars open up.
 
-> **PTO:** if you send your time off as an invite that includes `pto@docme360.com` (the usual way), the bot won't suggest times during it, even if it's marked *Free*. Only PTO you sent yourself counts as your time off. The bot never reads event titles.
+> **PTO:** if you send your time off as an invite that includes `pto@docme360.com` (the usual way), the bot won't suggest times during it, even if it's marked *Free*. A teammate's PTO invite on your calendar never blocks you, even if it shows as *Out of Office*. The bot never reads event titles.
 
 > All-day and multi-day invites you haven't answered (Outlook shows these as *tentative*) don't block suggested times, so an unanswered company-wide event won't hide your options. Out-of-office time and regular meetings always do.
 
@@ -119,7 +119,7 @@ After you pick a slot, the bot replaces the buttons with a confirmation showing 
 
 If you need to change the time, click the **Reschedule** button on the confirmation message — or just type `/watercooler reschedule` from anywhere and the bot will find your meeting for you, so you don't have to scroll back through the DM to find the button.
 
-Either way, you'll get fresh time options with more variety than the original suggestion — spanning later today through next week, not just a few days out.
+Either way, you'll get **every** open time you and your match share — each half-hour from about 30 minutes from now until the round ends, grouped by week and day. It shows the first two weeks that have open times; if a week has none (say someone's on PTO), it says so and moves on to the next.
 
 > **Rescheduling is private until you book.** The new time options are only visible to you — your match isn't notified that you're looking. They find out when you actually pick a new time, at which point everyone gets the updated confirmation and calendar invite. Until then, the existing meeting stays on both calendars exactly as it was.
 
@@ -159,7 +159,7 @@ If nobody clicks a time slot within about **2.5 days**, Watercooler automaticall
 It means your calendars didn't share a free 15-minute slot during work hours over the next two weeks — usually because someone is out of office or on PTO. Pick a time together in the chat, or run `/watercooler reschedule` after whoever is out gets back; it searches fresh dates each time. If nothing is booked by the deadline, the bot also checks once more on its own.
 
 **Can I change the meeting time after it's booked?**
-Yes — click **🔄 Reschedule** on the booking confirmation in your match DM, or type `/watercooler reschedule` from anywhere if you can't find that message. Fresh time options appear (a wider spread than the original — later today through next week), pick one, and the old calendar event is replaced automatically. (Reschedule through the bot, not by editing the Outlook event — the bot won't know about changes made directly in Outlook.)
+Yes — click **🔄 Reschedule** on the booking confirmation in your match DM, or type `/watercooler reschedule` from anywhere if you can't find that message. A private list of every open time appears (half-hour starts from later today until the round ends), pick one, and the old calendar event is replaced automatically. (Reschedule through the bot, not by editing the Outlook event — the bot won't know about changes made directly in Outlook.)
 
 **Will my match know I'm trying to reschedule?**
 Not until you actually book a new time. The time options are shown only to you — nothing is posted in the shared DM while you're looking. Your match is notified at the moment you pick a new slot, when the updated confirmation and calendar invite go out. If you change your mind and don't pick anything, they never know, and the original meeting stays exactly as it was.

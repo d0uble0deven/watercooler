@@ -34,15 +34,18 @@ const calendarReader = require('../src/integrations/calendarReader');
 
 const realGetGraphClient = msGraph.getGraphClient;
 const realFindPrime      = slotFinder.findSlotsWithPrimePreference;
+const realFindSlots      = slotFinder.findSlots;
 const realGetFreeBusy    = calendarReader.getFreeBusy;
 msGraph.getGraphClient                = () => ({});
 slotFinder.findSlotsWithPrimePreference = () => [];
+slotFinder.findSlots                  = () => [];   // the private full list's finder
 calendarReader.getFreeBusy            = async () => [];
 
 const { suggestMeetingTimes, buildNoSlotsNotice } = require('../src/integrations/calendarScheduler');
 
 msGraph.getGraphClient                  = realGetGraphClient;
 slotFinder.findSlotsWithPrimePreference = realFindPrime;
+slotFinder.findSlots                    = realFindSlots;
 calendarReader.getFreeBusy              = realGetFreeBusy;
 
 const { parseResponse } = calendarReader;
@@ -220,7 +223,7 @@ console.log('\n=== Round 10 Regression Tests ===\n');
 
     posts.length = 0;
     await suggestMeetingTimes(client, 'C_R10_NOTICE', matchId, users, settings, false,
-      { richVariety: true, privateToUserId: 'U_R10_NOTICE_A' });
+      { browse: true, privateToUserId: 'U_R10_NOTICE_A' });
     check('reschedule: nothing posted publicly (partner not notified)', posts.length === 0, posts.length);
     check('reschedule: notice sent privately to the requester only',
       ephemerals.length === 1 && ephemerals[0].user === 'U_R10_NOTICE_A', ephemerals.map((e) => e.user));

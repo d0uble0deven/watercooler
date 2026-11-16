@@ -23,11 +23,13 @@
 //   2. resetBooking() — copies calendar_event_id → previous_event_id, clears
 //      booking fields. Skipped if already mid-reschedule (would clobber the
 //      pointer to the original event that still needs deleting).
-//   3. suggestMeetingTimes in rich + private mode — more slots, more spread,
-//      visible only to the requester.
+//   3. postPrivateTimeOptions — the private full list: every open half-hour
+//      from ~now until the round ends, grouped by week and day, visible only
+//      to the requester.
 
-const { getMatch, getMatchUsers, resetBooking, getSettings } = require('../../lib/rounds');
+const { getMatch, getMatchUsers, resetBooking, getSettings, getRoundById } = require('../../lib/rounds');
 const { suggestMeetingTimes } = require('../../integrations/calendarScheduler');
+const { getRoundEndDate } = require('../../lib/roundSchedule');
 
 /**
  * Guard-only check — no side effects. Both entry points call this first so
@@ -73,15 +75,29 @@ async function performReschedule(client, match, requesterId) {
     console.log(`[reschedule] Match ${match.id} already awaiting a slot — reposting options only.`);
   }
 
-  // Force calendar_enabled so it runs regardless of the global setting (the
-  // user already had a booked meeting, Azure is working). richVariety gives
-  // a wider, more varied spread than the initial round suggestion.
+  await postPrivateTimeOptions(client, match, requesterId);
+}
+
+/**
+ * Posts the private full list — every open half-hour from ~now until the
+ * match's round ends — to one person. Never touches the booking: Reschedule
+ * resets it first.
+ *
+ * calendar_enabled is forced on so this runs regardless of the global setting
+ * (someone is actively asking for times; Azure is working).
+ *
+ * @param {object} client       Bolt Web API client
+ * @param {object} match        Match row
+ * @param {string} requesterId  Slack user ID — the only person who sees the list
+ */
+async function postPrivateTimeOptions(client, match, requesterId) {
   const users    = getMatchUsers(match.id);
   const settings = { ...getSettings(), calendar_enabled: true };
+  const roundEnd = getRoundEndDate(getRoundById(match.round_id), settings);
 
   await suggestMeetingTimes(
     client, match.slack_dm_channel_id, match.id, users, settings, false,
-    { richVariety: true, privateToUserId: requesterId },
+    { browse: true, privateToUserId: requesterId, roundEnd },
   );
 }
 
@@ -136,4 +152,6 @@ async function safeEphemeral(client, channelId, userId, text) {
   }
 }
 
-module.exports = { handleReschedule, checkRescheduleEligibility, performReschedule, safeEphemeral };
+module.exports = {
+  handleReschedule, checkRescheduleEligibility, performReschedule, postPrivateTimeOptions, safeEphemeral,
+};

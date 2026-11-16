@@ -71,6 +71,9 @@ console.log('subtractBusinessDays()');
 }
 
 // ── calculateNextRoundDate ────────────────────────────────────────────────────
+// It reads the last round from the DB (cadence-aware), so the schema must
+// exist first. Fresh DB → no rounds yet → the next intro day.
+initDb();
 console.log('\ncalculateNextRoundDate()');
 {
   // Settings: monday at 10:00

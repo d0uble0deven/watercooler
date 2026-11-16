@@ -275,5 +275,7 @@ CONTACT_NAME=Your Name
 - [x] Timezone awareness — per-user M365 timezones, shared-window intersection, DST-correct display
 - [x] Admin workflow commands — list-matches, force-book, send-completion, resend-suggestions, cancel-round
 - [x] Reschedule flow — user-initiated reschedule button; deferred old-event deletion after new slot confirmed
-- [x] Reschedule variety + self-serve command — up to 9 slots spanning "later today" through next week (vs. 3 for the initial round suggestion); `/watercooler reschedule` finds your match without needing the original button
+- [x] Reschedule full list + self-serve command — every open half-hour from ~30 minutes out until the round ends, grouped by week and day (first two weeks with open times; vs. 3 for the initial round suggestion); `/watercooler reschedule` finds your match without needing the original button
 - [x] Silent rescheduling — slot options post ephemerally to the requester only; the match partner is notified at the moment a new time is booked, not before. Works at any point in the round and in any state — booked, never booked, past its meeting time, or already marked complete (a declined invite lands here).
+- [x] PTO-aware scheduling — your own PTO invite (one that includes pto@docme360.com) blocks you even when marked Free; a teammate's PTO on your calendar never blocks you. Event titles are never read.
+- [x] Cadence-aware "next round" date in wrap-up messages (matches when the scheduler actually runs)

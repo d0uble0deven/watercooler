@@ -36,7 +36,7 @@ const config = {
 
   // PTO convention: time off goes out as an invite that includes this address.
   // An event a person ORGANIZED that invites it counts as their time off, even
-  // when it's marked Free. See "PTO detection" in integrations/calendarReader.js.
+  // when it's marked Free. See "PTO handling" in integrations/calendarReader.js.
   ptoAttendeeAddress: (process.env.PTO_ATTENDEE_ADDRESS || 'pto@docme360.com').trim().toLowerCase(),
 
   // Name shown in calendar invites as the person to contact for issues.

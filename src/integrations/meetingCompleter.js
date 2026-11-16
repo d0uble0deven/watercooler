@@ -20,7 +20,9 @@ const {
   isRoundFullyComplete,
   markRoundSummarySent,
   getRoundMatchCount,
+  getParticipantCounts,
 } = require('../lib/rounds');
+const { nextRoundTime } = require('../lib/roundSchedule');
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -266,21 +268,32 @@ function buildCompletionMessage(matchId, nextRoundDate, timezoneId = 'America/Ne
 // ── Next round date ───────────────────────────────────────────────────────────
 
 /**
- * Computes the next date/time the scheduler would fire a round, based on
- * intro_day + intro_time in settings. Used for the "next round goes out on…"
- * line in the completion message.
+ * Computes the next date/time the scheduler will start a round. Used for the
+ * "next round of intros goes out on…" line in the completion message and the
+ * round summary.
  *
- * Does NOT account for the cadence guard — it just finds the next calendar
- * occurrence of the scheduled day+time.
+ * Cadence-aware: asks the scheduler's own rule (via lib/roundSchedule) when
+ * the next round will actually run after the last one. Before, this returned
+ * the next intro_day — wrong two weeks out of three on a triweekly cadence.
  *
- * @param {object} settings  App settings row
+ * @param {object} settings      App settings row
+ * @param {Date}   [now=new Date()]
  * @returns {Date}
  */
-function calculateNextRoundDate(settings) {
+function calculateNextRoundDate(settings, now = new Date()) {
+  const { lastRoundDate } = getParticipantCounts();
+  return nextRoundTime(settings, lastRoundDate, now) ?? nextIntroOccurrence(settings, now);
+}
+
+/**
+ * The next calendar occurrence of intro_day at intro_time (server local time),
+ * ignoring cadence. Fallback only — used if the cadence-aware lookup can't
+ * produce a date.
+ */
+function nextIntroOccurrence(settings, now = new Date()) {
   const dayNum          = parseDayToNumber(settings.intro_day);
   const { hour, minute } = parseIntroTime(settings.intro_time);
 
-  const now    = new Date();
   const result = new Date(now);
 
   // Set to the target hour/minute on today's date (local time)
