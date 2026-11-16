@@ -24,21 +24,33 @@ function check(label, condition, actual) {
 }
 
 // ── Mock Graph client factory ─────────────────────────────────────────────────
-// Simulates client.api(path).post(body) → { value: [...] }
+// Simulates client.api(path).post(body) → { value: [...] } for getSchedule,
+// and client.api(path).header(...).get() → { value: [] } for the per-person
+// PTO lookup (no events — PTO detection has its own suite: test:pto).
 
 function mockClient(responseValue) {
   return {
-    api: (_path) => ({
-      post: async (_body) => ({ value: responseValue }),
-    }),
+    api: (_path) => {
+      const req = {
+        post:   async (_body) => ({ value: responseValue }),
+        header: () => req,
+        get:    async () => ({ value: [] }),
+      };
+      return req;
+    },
   };
 }
 
 function errorClient(message) {
   return {
-    api: (_path) => ({
-      post: async (_body) => { throw new Error(message); },
-    }),
+    api: (_path) => {
+      const req = {
+        post:   async (_body) => { throw new Error(message); },
+        header: () => req,
+        get:    async () => { throw new Error(message); },
+      };
+      return req;
+    },
   };
 }
 

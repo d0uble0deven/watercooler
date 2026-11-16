@@ -59,7 +59,7 @@ You'll land on the app overview page. **Leave this page open** — you'll need t
 
 | Permission to add | Why the app needs it |
 |---|---|
-| `Calendars.Read` | Read employees' calendars to find times when both people are free |
+| `Calendars.Read` | Read employees' calendars to find times when both people are free, and to spot their own PTO (only each event's times, organizer and attendee addresses are read — never titles or descriptions) |
 | `Calendars.ReadWrite` | Create the calendar invite once a meeting time is confirmed |
 | `OnlineMeetings.ReadWrite` | Generate a Teams meeting link to include in the invite |
 | `User.Read.All` | Look up each employee's email address and timezone |

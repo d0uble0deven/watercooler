@@ -107,6 +107,8 @@ Shortly after the intro DM, the bot posts a message with meeting time options ba
 
 If there's no time you're all free over the next two weeks — say someone is out of office — the bot says so instead of posting buttons. Agree on a time in the chat, or run `/watercooler reschedule` once calendars open up.
 
+> **PTO:** if you send your time off as an invite that includes `pto@docme360.com` (the usual way), the bot won't suggest times during it, even if it's marked *Free*. Only PTO you sent yourself counts as your time off. The bot never reads event titles.
+
 > All-day and multi-day invites you haven't answered (Outlook shows these as *tentative*) don't block suggested times, so an unanswered company-wide event won't hide your options. Out-of-office time and regular meetings always do.
 
 #### 2. Booking confirmation
@@ -154,7 +156,7 @@ Every **3 weeks**, on **Monday mornings** (around 9 AM Eastern). Watch for a gro
 If nobody clicks a time slot within about **2.5 days**, Watercooler automatically books the best available slot from your calendars and sends the invite. You can always hit 🔄 Reschedule if it picked badly.
 
 **The bot said it couldn't find a time for us. What now?**
-It means your calendars didn't share a free 15-minute slot during work hours over the next two weeks — usually because someone is out of office. Pick a time together in the chat, or run `/watercooler reschedule` after whoever is out gets back; it searches fresh dates each time. If nothing is booked by the deadline, the bot also checks once more on its own.
+It means your calendars didn't share a free 15-minute slot during work hours over the next two weeks — usually because someone is out of office or on PTO. Pick a time together in the chat, or run `/watercooler reschedule` after whoever is out gets back; it searches fresh dates each time. If nothing is booked by the deadline, the bot also checks once more on its own.
 
 **Can I change the meeting time after it's booked?**
 Yes — click **🔄 Reschedule** on the booking confirmation in your match DM, or type `/watercooler reschedule` from anywhere if you can't find that message. Fresh time options appear (a wider spread than the original — later today through next week), pick one, and the old calendar event is replaced automatically. (Reschedule through the bot, not by editing the Outlook event — the bot won't know about changes made directly in Outlook.)
