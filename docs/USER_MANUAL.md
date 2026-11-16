@@ -103,7 +103,9 @@ When a round runs, Watercooler will send you a group DM with your match(es). Her
 
 #### 1. Slot suggestions
 
-Shortly after the intro DM, the bot posts a message with meeting time options based on everyone's Outlook calendars. Each option shows a time and timezone abbreviation (e.g. `Mon Jun 9, 2:00 – 2:30 PM CDT`). Click any button to book that slot.
+Shortly after the intro DM, the bot posts a message with three meeting time options based on everyone's Outlook calendars (e.g. `Mon, Jun 9 · 2:00 PM` — the timezone is shown underneath). Click any button to book that slot.
+
+None of them work? Click **🗓️ More times** to see every open time you share, from later today until the round ends — the same private list Reschedule shows. Only you see it, and your match isn't notified until you book. Once a time is booked, the original suggestions message is replaced with a short note pointing to the confirmation, so old buttons don't linger.
 
 If there's no time you're all free over the next two weeks — say someone is out of office — the bot says so instead of posting buttons. Agree on a time in the chat, or run `/watercooler reschedule` once calendars open up.
 

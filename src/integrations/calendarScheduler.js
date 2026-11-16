@@ -249,11 +249,7 @@ function buildNoSlotsNotice(
   { isPrivate = false, testMode = false, roundEnd = null, timezoneId = "UTC" } = {},
 ) {
   const everyone = groupSize > 2 ? "all" : "both";
-  const roundEndLabel = roundEnd
-    ? new Intl.DateTimeFormat("en-US", {
-        timeZone: timezoneId, weekday: "short", month: "short", day: "numeric",
-      }).format(roundEnd)
-    : null;
+  const roundEndLabel = roundEnd ? formatShortDate(roundEnd, timezoneId) : null;
 
   const body = isPrivate
     ? (roundEndLabel
@@ -339,7 +335,9 @@ async function postBrowseOptions({
     return;
   }
 
-  const blocks = buildBrowseMessage(sequence, matchId, displayTz, { testMode, now });
+  const blocks = buildBrowseMessage(sequence, matchId, displayTz, {
+    testMode, now, roundEnd, complete: shownSlots.length === slots.length,
+  });
   try {
     await client.chat.postEphemeral({
       channel: channelId,
@@ -426,9 +424,17 @@ function pickBrowseWeeks(slots, rangeStart, rangeEnd, timezoneId, maxWeeks) {
  * @param {object}   [opts]
  * @param {boolean}  [opts.testMode=false]
  * @param {Date}     [opts.now=new Date()]  For "This week" / "Next week" labels
+ * @param {Date}     [opts.roundEnd]  When the list's range ends with the round
+ * @param {boolean}  [opts.complete=false]  Every open time in the range is shown
+ *   (nothing cut off by the two-week limit) — with roundEnd, adds a closing
+ *   "That's everything before this round wraps up on …" line, so a short list
+ *   (e.g. PTO later in the round) doesn't look like it was cut off.
  * @returns {object[]}
  */
-function buildBrowseMessage(sequence, matchId, timezoneId = "UTC", { testMode = false, now = new Date() } = {}) {
+function buildBrowseMessage(
+  sequence, matchId, timezoneId = "UTC",
+  { testMode = false, now = new Date(), roundEnd = null, complete = false } = {},
+) {
   const firstSlot = sequence.find((e) => e.type === "week").days[0].slots[0];
   const tzAbbr = getTzAbbr(firstSlot.start, timezoneId);
   const thisWeek = mondayOf(localDateKey(now, timezoneId));
@@ -488,6 +494,16 @@ function buildBrowseMessage(sequence, matchId, timezoneId = "UTC", { testMode = 
     }
   }
 
+  if (roundEnd && complete) {
+    blocks.push({
+      type: "context",
+      elements: [{
+        type: "mrkdwn",
+        text: `_That's everything before this round wraps up on ${formatShortDate(roundEnd, timezoneId)}._`,
+      }],
+    });
+  }
+
   if (testMode) {
     blocks.push({
       type: "context",
@@ -522,6 +538,12 @@ function formatWeekRange(mondayKey) {
   return mondayKey.slice(5, 7) === fridayKey.slice(5, 7)
     ? `${from}–${formatDateKey(fridayKey, { day: "numeric" })}`
     : `${from} – ${formatDateKey(fridayKey, { month: "short", day: "numeric" })}`;
+}
+/** "Mon, Dec 7" */
+function formatShortDate(date, timezoneId) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezoneId, weekday: "short", month: "short", day: "numeric",
+  }).format(date);
 }
 /** "9:30 AM" */
 function formatTimeOnly(date, timezoneId) {
@@ -930,6 +952,13 @@ function addBusinessDays(date, n) {
  * Builds a Block Kit blocks array for the suggestions message.
  * Pure function — no side effects, easy to unit test.
  *
+ * Layout: headline · the 3 green slot buttons · a "🗓️ More times" button on
+ * its own row (opens the private full list — commands/actions/moreTimes.js) ·
+ * footer with the timezone. Slot labels are short ("Tue, Nov 17 · 11:30 AM")
+ * because Slack truncates button text at ~30 characters; the timezone is in
+ * the footer. The slot row must stay the FIRST actions block — older code and
+ * tests look for it with find().
+ *
  * @param {Array<{start: Date, end: Date}>} slots
  * @param {number} matchId
  * @param {string}  timezoneId  IANA timezone for display (e.g. 'America/New_York')
@@ -948,7 +977,7 @@ function buildSuggestionsMessage(
     type: "button",
     text: {
       type: "plain_text",
-      text: formatSlotLabel(slot, timezoneId),
+      text: formatStarterLabel(slot.start, timezoneId),
       emoji: false,
     },
     // Value encodes all info needed to book the slot in Step 6:
@@ -962,7 +991,8 @@ function buildSuggestionsMessage(
     "📅 *Here are some times that work for everyone!*\n" +
     "Click a slot to book it — a calendar invite and Teams meeting link will be sent to everyone.";
 
-  const footer = `_All times in ${tzAbbr}. If none of these work, coordinate directly in this chat._`;
+  const footer =
+    `_All times in ${tzAbbr}. None of these work? Tap *More times* to see every open time — only you will see them._`;
 
   return [
     {
@@ -971,6 +1001,15 @@ function buildSuggestionsMessage(
     },
     // Up to 25 buttons fit in one actions block; the starter set has 3.
     { type: "actions", elements: buttons },
+    {
+      type: "actions",
+      elements: [{
+        type: "button",
+        text: { type: "plain_text", text: "🗓️ More times", emoji: true },
+        value: String(matchId),
+        action_id: "watercooler_more_times", // handled by commands/actions/moreTimes.js
+      }],
+    },
     {
       type: "context",
       elements: [
@@ -1019,6 +1058,17 @@ function formatSlotLabel(slot, timezoneId = "UTC") {
 }
 
 /**
+ * Short starter-button label: "Tue, Nov 17 · 11:30 AM" (≤ 22 characters, so
+ * Slack never truncates it). The timezone is stated once in the footer.
+ */
+function formatStarterLabel(date, timezoneId = "UTC") {
+  const day = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezoneId, weekday: "short", month: "short", day: "numeric",
+  }).format(date);
+  return `${day} · ${formatTimeOnly(date, timezoneId)}`;
+}
+
+/**
  * Returns the short timezone abbreviation for a given date, e.g. "EDT", "CST".
  */
 function getTzAbbr(date, timezoneId) {
@@ -1063,6 +1113,7 @@ module.exports = {
   buildBrowseMessage,
   pickBrowseWeeks,
   formatSlotLabel,
+  formatStarterLabel,
   // Exported for testing
   nextBusinessDay,
   addBusinessDays,

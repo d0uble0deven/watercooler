@@ -500,7 +500,9 @@ console.log('\n=== PTO Handling Tests ===');
         postEphemeral: async (m) => { posts.push(m); return {}; },
       } };
     };
-    const buttonsIn = (post) => post?.blocks.filter((b) => b.type === 'actions').flatMap((b) => b.elements) ?? [];
+    // Time-slot buttons only (the starter message also has a "More times" button).
+    const buttonsIn = (post) => (post?.blocks.filter((b) => b.type === 'actions').flatMap((b) => b.elements) ?? [])
+      .filter((e) => /^watercooler_book_slot_\d+$/.test(e.action_id));
 
     schedulerGraph = graphMock({ calendars: { [DEV]: [longPto(DEV, true)] } });
     const onPto = slack();

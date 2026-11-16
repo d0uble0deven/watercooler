@@ -154,8 +154,8 @@ const originalSettings = getSettings();
 
     const three = buildSuggestionsMessage(mk(3), 1, 'UTC', false);
     const threeActions = three.filter((b) => b.type === 'actions');
-    check('3 slots → exactly 1 actions block', threeActions.length === 1, threeActions.length);
-    check('3 slots → 1 block has all 3 buttons', threeActions[0].elements.length === 3);
+    check('3 slots → slot row + More times row', threeActions.length === 2, threeActions.length);
+    check('3 slots → the first row has all 3 slot buttons', threeActions[0].elements.length === 3);
     check('action_ids are watercooler_book_slot_0..2',
       threeActions[0].elements.map((b) => b.action_id).join(',') ===
       'watercooler_book_slot_0,watercooler_book_slot_1,watercooler_book_slot_2');
@@ -410,8 +410,11 @@ const originalSettings = getSettings();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Counts time-slot buttons only (not "More times"). */
 function countButtons(blocks) {
   return (blocks || [])
     .filter((b) => b.type === 'actions')
-    .reduce((sum, b) => sum + b.elements.length, 0);
+    .flatMap((b) => b.elements)
+    .filter((e) => /^watercooler_book_slot_\d+$/.test(e.action_id))
+    .length;
 }

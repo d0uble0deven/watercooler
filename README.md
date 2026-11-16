@@ -279,3 +279,4 @@ CONTACT_NAME=Your Name
 - [x] Silent rescheduling — slot options post ephemerally to the requester only; the match partner is notified at the moment a new time is booked, not before. Works at any point in the round and in any state — booked, never booked, past its meeting time, or already marked complete (a declined invite lands here).
 - [x] PTO-aware scheduling — your own PTO invite (one that includes pto@docme360.com) blocks you even when marked Free; a teammate's PTO on your calendar never blocks you. Event titles are never read.
 - [x] Cadence-aware "next round" date in wrap-up messages (matches when the scheduler actually runs)
+- [x] 🗓️ More times — a button under the 3 starter suggestions opens the same private full list without touching any booking; short starter labels ("Tue, Nov 17 · 11:30 AM"); booking from a private list replaces the previous public message (suggestions or old confirmation) with a pointer to the new one

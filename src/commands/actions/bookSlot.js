@@ -17,11 +17,13 @@
 // TWO SOURCES OF SLOT BUTTONS — the confirmation path differs:
 //   • Public suggestion message (initial round intro): chat.update() the
 //     original message in place, replacing buttons with the confirmation.
-//   • EPHEMERAL suggestion (the private reschedule flow): the clicked message
-//     is visible only to the requester and has no updatable ts, so instead we
-//     post the confirmation PUBLICLY — this is the moment the match partner
-//     learns about the new time — and then clear the requester's private
-//     options via response_url.
+//   • EPHEMERAL suggestion (the private full list — Reschedule, decline nudge,
+//     More times): the clicked message is visible only to the requester and
+//     has no updatable ts, so instead we post the confirmation PUBLICLY — this
+//     is the moment the match partner learns about the new time — then retire
+//     the match's previous public message (the starter suggestions, or the old
+//     confirmation after a reschedule) so its buttons and old time don't linger,
+//     and clear the requester's private options via response_url.
 //
 // Errors during a private flow stay private, so a failed reschedule attempt
 // never leaks into the shared DM.
@@ -29,7 +31,10 @@
 const config           = require('../../config');
 const { getGraphClient } = require('../../integrations/msGraph');
 const { bookMeeting, buildConfirmationMessage, buildAlreadyBookedMessage } = require('../../integrations/calendarBooker');
-const { getMatch, getMatchUsers, saveBooking, claimBooking, releaseBookingClaim, saveMeetingTimes, clearPreviousEvent } = require('../../lib/rounds');
+const {
+  getMatch, getMatchUsers, saveBooking, claimBooking, releaseBookingClaim, saveMeetingTimes,
+  clearPreviousEvent, saveSuggestionTs,
+} = require('../../lib/rounds');
 const { assignFunFact } = require('../../lib/funFacts');
 
 /**
@@ -160,15 +165,28 @@ async function handleBookSlot({ action, ack, body, client, respond }) {
   const blocks   = buildConfirmationMessage(booking, users, timezone, matchId);
 
   if (isEphemeral) {
-    // Private reschedule flow. Post the confirmation PUBLICLY first — this is
-    // the moment the match partner learns the time changed, and it's the part
-    // that must not be lost. Clearing the requester's private options is
-    // best-effort cleanup afterwards.
+    // Private flow. Post the confirmation PUBLICLY first — this is the moment
+    // the match partner learns the time, and it's the part that must not be
+    // lost. Everything after it is best-effort cleanup.
+    let posted = null;
     try {
-      await client.chat.postMessage({ channel: channelId, text: '✅ Meeting booked!', blocks });
+      posted = await client.chat.postMessage({ channel: channelId, text: '✅ Meeting booked!', blocks });
     } catch (err) {
       console.error('[bookSlot] Could not post booking confirmation:', err.message);
     }
+
+    // Retire the match's previous public message — the starter suggestions
+    // (whose slot and More times buttons would otherwise stay live) or, after
+    // a reschedule, the old confirmation still showing the old time. Only once
+    // the new confirmation is actually up. Then track the new one, so the next
+    // reschedule retires it in turn (and admin tools find it).
+    if (posted?.ts) {
+      await retirePreviousPublicMessage(
+        client, channelId, matchBeforeSave?.calendar_suggestion_ts, !!previousEventId,
+      );
+      saveSuggestionTs(matchId, posted.ts);
+    }
+
     await safeRespond(respond, {
       replace_original: true,
       text: '✅ Booked! The confirmation has been posted in this chat.',
@@ -193,6 +211,33 @@ async function handleBookSlot({ action, ack, body, client, respond }) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Replaces the match's previous public message with a one-line pointer to the
+ * new confirmation. Best-effort: a failure is logged, never thrown — the
+ * booking itself already succeeded.
+ *
+ * @param {object}  client
+ * @param {string}  channelId
+ * @param {string|null} ts         matches.calendar_suggestion_ts (null → nothing to do)
+ * @param {boolean} wasReschedule  The old message is a confirmation for an older time
+ */
+async function retirePreviousPublicMessage(client, channelId, ts, wasReschedule) {
+  if (!ts) return;
+  const text = wasReschedule
+    ? '🔄 _This meeting was rescheduled — see the new time below._'
+    : '✅ _Booked — see the confirmation below._';
+  try {
+    await client.chat.update({
+      channel: channelId,
+      ts,
+      text,
+      blocks: [{ type: 'context', elements: [{ type: 'mrkdwn', text }] }],
+    });
+  } catch (err) {
+    console.warn('[bookSlot] Could not retire the previous message:', err.message);
+  }
+}
 
 /**
  * Sends a message back to whoever clicked, matching the privacy of the message

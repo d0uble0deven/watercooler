@@ -225,6 +225,19 @@ console.log('\n=== Private Full List (browse) Tests ===');
 
     const test = buildBrowseMessage(seq, 42, ET, { now, testMode: true });
     check('test mode adds the 🧪 note at the end', test[test.length - 1].type === 'context' && textOf([test[test.length - 1]]).includes('🧪'));
+
+    const roundEnd = at('2026-12-07', '09:00');
+    const FOOTER = "_That's everything before this round wraps up on Mon, Dec 7._";
+    const full = buildBrowseMessage(seq, 42, ET, { now, roundEnd, complete: true });
+    check('everything shown + round end known → closing line "That\'s everything before this round wraps up on Mon, Dec 7."',
+      full[full.length - 1].type === 'context' && full[full.length - 1].elements[0].text === FOOTER, full[full.length - 1]);
+    check('list cut off at two weeks → no closing line',
+      !textOf(buildBrowseMessage(seq, 42, ET, { now, roundEnd, complete: false })).includes("That's everything"));
+    check('no round end (two-week fallback) → no closing line',
+      !textOf(buildBrowseMessage(seq, 42, ET, { now, complete: true })).includes("That's everything"));
+    const both = buildBrowseMessage(seq, 42, ET, { now, roundEnd, complete: true, testMode: true });
+    check('closing line comes before the 🧪 note',
+      both[both.length - 2].elements?.[0].text === FOOTER && textOf([both[both.length - 1]]).includes('🧪'));
   });
 
   await section('buildBrowseMessage() — Slack limits with two completely open weeks', () => {
@@ -275,6 +288,8 @@ console.log('\n=== Private Full List (browse) Tests ===');
       { browse: true, privateToUserId: 'U_BROWSE_A', roundEnd: new Date(Date.now() + 28 * DAY) });
     const headers = (long.ephemerals[0]?.blocks ?? []).filter((b) => b.type === 'header').length;
     check('4 weeks left in the round, all open → still exactly two weeks shown', headers === 2, headers);
+    check('…and no "that\'s everything" line (later weeks were left out)',
+      !textOf(long.ephemerals[0]?.blocks).includes("That's everything"));
   });
 
   await section('suggestMeetingTimes({ browse }) — busy times and PTO', async () => {
@@ -308,6 +323,19 @@ console.log('\n=== Private Full List (browse) Tests ===');
       (blocks ?? []).some((b) => b.type === 'header' && b.text.text.startsWith(`Week of ${label(weekAfter)}`)));
     check('no time offered during the PTO week',
       buttonsOf(blocks).map(valueStart).every((s) => localDateKey(s, ET) < nextMonday || localDateKey(s, ET) >= addDaysToKey(nextMonday, 5)));
+
+    // A on PTO from the week after next until past the round end (like Dev in Nov 2026):
+    // the list is short, so it closes by saying that's everything in the round.
+    graph = graphMock({ calendars: { [A]: [ownPto(weekAfter, addDaysToKey(weekAfter, 60))] } });
+    const short = slackClient();
+    const roundEnd = zonedTime(addDaysToKey(thisMonday, 28), 9, 0, ET);
+    await suggestMeetingTimes(short, 'C_BROWSE', matchId, usersAB, settings, false,
+      { browse: true, privateToUserId: 'U_BROWSE_A', roundEnd });
+    const shortBlocks = short.ephemerals[0]?.blocks ?? [];
+    const endLabel = new Intl.DateTimeFormat('en-US', { timeZone: ET, weekday: 'short', month: 'short', day: 'numeric' }).format(roundEnd);
+    check(`PTO for the rest of the round → closes with "That's everything before this round wraps up on ${endLabel}."`,
+      shortBlocks[shortBlocks.length - 1]?.elements?.[0]?.text === `_That's everything before this round wraps up on ${endLabel}._`,
+      shortBlocks[shortBlocks.length - 1]);
   });
 
   await section('suggestMeetingTimes({ browse }) — nothing open / no round end', async () => {

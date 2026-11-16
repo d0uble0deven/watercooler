@@ -88,6 +88,11 @@ async function start() {
   const { handleReschedule } = require('./commands/actions/reschedule');
   app.action('watercooler_reschedule', handleReschedule);
 
+  // "🗓️ More times" under the starter suggestions — private full list of
+  // open times; never resets a booking.
+  const { handleMoreTimes } = require('./commands/actions/moreTimes');
+  app.action('watercooler_more_times', handleMoreTimes);
+
   // Post-meeting feedback buttons (Phase 11 Step 4)
   const { handleMeetingGood, handleMeetingMeh, handleMeetingSnooze } =
     require('./commands/actions/meetingFeedback');
